@@ -1,0 +1,30 @@
+{
+  "name": "hsp-a2a-firewall",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "dev": "tsx",
+    "compile:contracts": "tsx scripts/compile.ts",
+    "deploy:testnet": "tsx scripts/deploy.ts",
+    "mcp:dump": "tsx scripts/mcp-dump.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.4.7",
+    "viem": "^2.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "solc": "^0.8.24",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  }
+}
