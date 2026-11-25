@@ -105,13 +105,15 @@ export const typedDataTypesSchema = z.record(
   z.array(typedDataFieldSchema),
 );
 
-export const typedDataDomainSchema = z.object({
-  name: z.string(),
-  version: z.string(),
-  chainId: chainIdSchema,
-  verifyingContract: evmAddressSchema,
-  salt: bytes32Schema.optional(),
-});
+export const typedDataDomainSchema = z
+  .object({
+    name: z.string(),
+    version: z.string().optional(),
+    chainId: chainIdSchema,
+    verifyingContract: evmAddressSchema,
+    salt: bytes32Schema.optional(),
+  })
+  .passthrough();
 
 /**
  * The exact object returned by `prepare_payment`. Production signing uses it

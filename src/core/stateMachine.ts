@@ -1,6 +1,10 @@
 import type { Address, Hex } from 'viem';
 import { isQuoteExpiredError, type IHspMcpClient } from '../mcp/client.js';
-import type { PreparePaymentOutput } from '../mcp/schemas.js';
+import type {
+  FinalizePaymentOutput,
+  PreparePaymentOutput,
+  SubmitPaymentOutput,
+} from '../mcp/schemas.js';
 import type { PaymentSigner } from './eip712.js';
 import type { SpendLedger } from './ledger.js';
 import {
@@ -183,33 +187,128 @@ export class PaymentOrchestrator {
       quote_expires_at: order.quote_expires_at,
     });
 
-    // ---- prepare_payment, with max one automatic re-quote on the SAME
-    // order (R2). create_order is NEVER called again. -------------------
+    // ---- prepare -> policy -> sign -> finalize -> submit, with max one
+    // automatic re-quote on the SAME order (R2). A 30043 from prepare,
+    // finalize or submit all take this same path; create_order is NEVER
+    // called again. -----------------------------------------------------
     let prepared: PreparePaymentOutput | undefined;
     let requotes = 0;
+    let signature: Hex | undefined;
+    let finalized: FinalizePaymentOutput | undefined;
+    let submitted: SubmitPaymentOutput | undefined;
 
-    while (prepared === undefined) {
-      try {
-        prepared = await this.#config.client.prepare_payment({
-          order_id: order.order_id,
-          flow_id: order.flow_id,
-          payment_request_id: order.payment_request_id,
-          payer: this.#config.signer.address,
-        });
-      } catch (error) {
-        if (isQuoteExpiredError(error) && requotes < 1) {
-          requotes += 1;
-          this.#transition('REQUOTING', {
-            trigger: 'ERROR_30043',
-            attempt: requotes,
-            message: error instanceof Error ? error.message : String(error),
+    while (finalized === undefined) {
+      if (prepared === undefined) {
+        try {
+          prepared = await this.#config.client.prepare_payment({
+            order_id: order.order_id,
+            flow_id: order.flow_id,
+            payment_request_id: order.payment_request_id,
+            payer: this.#config.signer.address,
           });
-          continue;
+        } catch (error) {
+          if (isQuoteExpiredError(error) && requotes < 1) {
+            requotes += 1;
+            this.#transition('REQUOTING', {
+              trigger: 'ERROR_30043',
+              phase: 'prepare',
+              attempt: requotes,
+              message: error instanceof Error ? error.message : String(error),
+            });
+            continue;
+          }
+
+          if (isQuoteExpiredError(error)) {
+            return this.#fail('QUOTE_EXPIRED', {
+              trigger: 'ERROR_30043',
+              phase: 'prepare',
+              attempts: requotes + 1,
+            });
+          }
+
+          throw error;
         }
 
+        const expiresAt = Date.parse(prepared.quote_expires_at);
+
+        // A malformed or already-expired quote must never be signed.
+        if (!Number.isFinite(expiresAt) || expiresAt <= this.#now().getTime()) {
+          if (requotes < 1) {
+            requotes += 1;
+            this.#transition('REQUOTING', {
+              trigger: 'QUOTE_EXPIRES_AT',
+              attempt: requotes,
+              quote_expires_at: prepared.quote_expires_at,
+            });
+            prepared = undefined;
+            continue;
+          }
+
+          return this.#fail('QUOTE_EXPIRED', {
+            trigger: 'QUOTE_EXPIRES_AT',
+            quote_expires_at: prepared.quote_expires_at,
+            attempts: requotes + 1,
+          });
+        }
+
+        this.#transition('PREPARED', {
+          token_total_raw: prepared.token_total_raw,
+          quote_expires_at: prepared.quote_expires_at,
+          re_quoted: requotes > 0,
+        });
+      }
+
+      // ---- Policy is re-run on the (possibly re-quoted) total (R2). ---
+      const postDecision = this.#evaluate(
+        prepared.token_total_raw,
+        request.token,
+        request.merchantName,
+        spentToday,
+      );
+      this.#transition('POLICY_CHECKED', {
+        phase: 'post_quote',
+        quotedTotalRaw: prepared.token_total_raw,
+        decision: postDecision,
+      });
+
+      if (!postDecision.allowed) {
+        return this.#fail(postDecision.reason, { policy: postDecision });
+      }
+
+      // ---- Production signing path only (R1). -------------------------
+      signature = await this.#config.signer.sign(prepared.eip712);
+      this.#transition('SIGNED', {
+        signer: this.#config.signer.address,
+        primaryType: prepared.eip712.primaryType,
+      });
+
+      try {
+        finalized = await this.#config.client.finalize_payment({
+          order_id: order.order_id,
+          payment_request_id: order.payment_request_id,
+          payer: this.#config.signer.address,
+          signature,
+        });
+      } catch (error) {
         if (isQuoteExpiredError(error)) {
+          if (requotes < 1) {
+            requotes += 1;
+            prepared = undefined;
+            signature = undefined;
+            this.#paymentId = undefined;
+            this.#txSignature = undefined;
+            this.#transition('REQUOTING', {
+              trigger: 'ERROR_30043',
+              phase: 'finalize',
+              attempt: requotes,
+              message: error instanceof Error ? error.message : String(error),
+            });
+            continue;
+          }
+
           return this.#fail('QUOTE_EXPIRED', {
             trigger: 'ERROR_30043',
+            phase: 'finalize',
             attempts: requotes + 1,
           });
         }
@@ -217,84 +316,69 @@ export class PaymentOrchestrator {
         throw error;
       }
 
-      const expiresAt = Date.parse(prepared.quote_expires_at);
+      this.#paymentId = finalized.payment_id;
+      this.#txSignature = finalized.tx_signature ?? null;
+      this.#transition('FINALIZED', {
+        payment_id: finalized.payment_id,
+        status: finalized.status,
+        tx_signature: finalized.tx_signature ?? null,
+      });
 
-      // A malformed or already-expired quote must never be signed.
-      if (!Number.isFinite(expiresAt) || expiresAt <= this.#now().getTime()) {
-        if (requotes < 1) {
-          requotes += 1;
-          this.#transition('REQUOTING', {
-            trigger: 'QUOTE_EXPIRES_AT',
-            attempt: requotes,
-            quote_expires_at: prepared.quote_expires_at,
+      try {
+        submitted = await this.#config.client.submit_payment({
+          order_id: order.order_id,
+          payment_id: finalized.payment_id,
+          signature,
+        });
+      } catch (error) {
+        if (isQuoteExpiredError(error)) {
+          if (requotes < 1) {
+            requotes += 1;
+            prepared = undefined;
+            finalized = undefined;
+            submitted = undefined;
+            signature = undefined;
+            this.#paymentId = undefined;
+            this.#txSignature = undefined;
+            this.#transition('REQUOTING', {
+              trigger: 'ERROR_30043',
+              phase: 'submit',
+              attempt: requotes,
+              message: error instanceof Error ? error.message : String(error),
+            });
+            continue;
+          }
+
+          return this.#fail('QUOTE_EXPIRED', {
+            trigger: 'ERROR_30043',
+            phase: 'submit',
+            attempts: requotes + 1,
           });
-          prepared = undefined;
-          continue;
         }
 
-        return this.#fail('QUOTE_EXPIRED', {
-          trigger: 'QUOTE_EXPIRES_AT',
-          quote_expires_at: prepared.quote_expires_at,
-          attempts: requotes + 1,
-        });
+        throw error;
       }
 
-      this.#transition('PREPARED', {
-        token_total_raw: prepared.token_total_raw,
-        quote_expires_at: prepared.quote_expires_at,
-        re_quoted: requotes > 0,
+      this.#txSignature = submitted.tx_signature ?? this.#txSignature;
+      this.#transition('SUBMITTED', {
+        payment_id: submitted.payment_id,
+        status: submitted.status,
+        tx_signature: submitted.tx_signature ?? null,
       });
     }
 
-    // ---- Policy is re-run on the (possibly re-quoted) total (R2). -----
-    const postDecision = this.#evaluate(
-      prepared.token_total_raw,
-      request.token,
-      request.merchantName,
-      spentToday,
-    );
-    this.#transition('POLICY_CHECKED', {
-      phase: 'post_quote',
-      quotedTotalRaw: prepared.token_total_raw,
-      decision: postDecision,
-    });
-
-    if (!postDecision.allowed) {
-      return this.#fail(postDecision.reason, { policy: postDecision });
+    if (
+      prepared === undefined ||
+      signature === undefined ||
+      finalized === undefined ||
+      submitted === undefined
+    ) {
+      return this.#fail('INTERNAL_ERROR', {
+        error: 'payment pipeline exited without a complete result',
+      });
     }
 
-    // ---- Production signing path only (R1). ---------------------------
-    const signature = await this.#config.signer.sign(prepared.eip712);
-    this.#transition('SIGNED', {
-      signer: this.#config.signer.address,
-      primaryType: prepared.eip712.primaryType,
-    });
-
-    const finalized = await this.#config.client.finalize_payment({
-      order_id: order.order_id,
-      payment_request_id: order.payment_request_id,
-      payer: this.#config.signer.address,
-      signature,
-    });
-    this.#paymentId = finalized.payment_id;
-    this.#txSignature = finalized.tx_signature ?? null;
-    this.#transition('FINALIZED', {
-      payment_id: finalized.payment_id,
-      status: finalized.status,
-      tx_signature: finalized.tx_signature ?? null,
-    });
-
-    const submitted = await this.#config.client.submit_payment({
-      order_id: order.order_id,
-      payment_id: finalized.payment_id,
-      signature,
-    });
-    this.#txSignature = submitted.tx_signature ?? this.#txSignature;
-    this.#transition('SUBMITTED', {
-      payment_id: submitted.payment_id,
-      status: submitted.status,
-      tx_signature: submitted.tx_signature ?? null,
-    });
+    const quote = prepared;
 
     // ---- Poll until terminal. Timeout NEVER recreates the order (R4). --
     this.#transition('POLLING', {
@@ -330,7 +414,7 @@ export class PaymentOrchestrator {
           status: query.status,
           attribution_verified: true,
           attribution_merchant_name: query.attribution_merchant_name ?? null,
-          token_total_raw: prepared.token_total_raw,
+          token_total_raw: quote.token_total_raw,
           tx_signature: this.#txSignature ?? null,
         });
 
@@ -344,7 +428,7 @@ export class PaymentOrchestrator {
               paymentRequestId: order.payment_request_id,
               merchantName: request.merchantName,
               token: request.token as Address,
-              amount: BigInt(prepared.token_total_raw),
+              amount: BigInt(quote.token_total_raw),
             });
             receiptTxHash = receipt.txHash;
           } catch (error) {
@@ -354,7 +438,7 @@ export class PaymentOrchestrator {
         }
 
         try {
-          this.#config.ledger.addSpend(BigInt(prepared.token_total_raw));
+          this.#config.ledger.addSpend(BigInt(quote.token_total_raw));
         } catch (error) {
           receiptError ??=
             error instanceof Error ? error.message : String(error);
@@ -367,7 +451,7 @@ export class PaymentOrchestrator {
           paymentRequestId: this.#paymentRequestId,
           paymentId: this.#paymentId,
           txSignature: this.#txSignature ?? null,
-          amountRaw: prepared.token_total_raw,
+          amountRaw: quote.token_total_raw,
           signature,
           receiptTxHash,
           receiptError,

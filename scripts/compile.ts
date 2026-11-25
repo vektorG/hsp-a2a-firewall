@@ -38,6 +38,7 @@ const input = {
     [sourceName]: { content: source },
   },
   settings: {
+    evmVersion: 'paris',
     optimizer: { enabled: true, runs: 200 },
     outputSelection: {
       '*': {

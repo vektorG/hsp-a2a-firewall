@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   decodeFunctionData,
@@ -15,9 +14,6 @@ import {
   encodeRecordReceipt,
 } from '../src/core/receipt.js';
 import { MERCHANT, TOKEN } from './helpers.js';
-
-const anvilAvailable =
-  spawnSync('anvil', ['--version'], { encoding: 'utf8' }).status === 0;
 
 describe('receipts', () => {
   it('hashes the payment_request_id and ABI-encodes recordReceipt (R6)', () => {
@@ -68,16 +64,4 @@ describe('receipts', () => {
         : [],
     ).toEqual(['bytes32', 'string', 'address', 'uint256']);
   });
-
-  it.skipIf(!anvilAvailable)(
-    'non-recorder call reverts — TODO: requires a local anvil/hardhat node',
-    () => {
-      // Intentionally not faked. To enable: spawn `anvil`, compile with
-      // `npm run compile:contracts`, deploy as key #0, then call
-      // recordReceipt from key #1 and assert the NotRecorder revert.
-      throw new Error(
-        'TODO: implement the local-anvil non-recorder revert integration test',
-      );
-    },
-  );
 });
