@@ -4,3 +4,7 @@ dist/
 .env
 data/
 artifacts/
+
+ui/node_modules/
+ui/dist/
+data/
