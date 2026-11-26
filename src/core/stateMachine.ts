@@ -9,6 +9,12 @@ import type {
 import type { PaymentSigner } from './eip712.js';
 import type { SpendLedger } from './ledger.js';
 import {
+  isTerminalPaymentState,
+  readLastPayment,
+  writeLastPayment,
+  type LastPaymentRecord,
+} from './paymentState.js';
+import {
   PolicyEngine,
   type PolicyDecision,
   type PolicyReason,
@@ -295,6 +301,15 @@ export interface PaymentOrchestratorConfig {
   maxPollAttempts?: number;
   /** R4: max timeout retries before FAILED(POLL_TIMEOUT). */
   maxTimeoutRetries?: number;
+  /**
+   * Optional checkpoint file (e.g. `data/last-payment.json`). When set, every
+   * transition is persisted and `execute()` refuses a new `create_order` while
+   * a non-terminal payment is on disk. Left undefined by default so existing
+   * in-memory unit tests never touch disk.
+   */
+  lastPaymentPath?: string;
+  /** `--force`: ignore an existing non-terminal checkpoint. */
+  force?: boolean;
   onTrace?: (event: TraceEvent) => void;
 }
 
@@ -324,6 +339,8 @@ export class PaymentOrchestrator {
   #paymentRequestId?: string;
   #paymentId?: string;
   #txSignature?: string | null;
+  #request?: PaymentRequest;
+  #tokenTotalRaw?: string;
 
   readonly #config: PaymentOrchestratorConfig;
   readonly #now: () => Date;
@@ -355,6 +372,16 @@ export class PaymentOrchestrator {
     this.#paymentRequestId = undefined;
     this.#paymentId = undefined;
     this.#txSignature = undefined;
+    this.#request = request;
+    this.#tokenTotalRaw = undefined;
+
+    // ---- Resume guard: never create a second order while a non-terminal
+    // payment is checkpointed, unless the operator passed --force. --------
+    const pending = this.#pendingPayment();
+
+    if (pending !== null && this.#config.force !== true) {
+      return this.#refusePending(pending);
+    }
 
     try {
       return await this.#run(request);
@@ -398,6 +425,7 @@ export class PaymentOrchestrator {
     this.#orderId = order.order_id;
     this.#flowId = order.flow_id;
     this.#paymentRequestId = order.payment_request_id;
+    this.#tokenTotalRaw = order.token_total_raw;
     this.#transition('ORDER_CREATED', {
       flow_id: order.flow_id,
       payment_request_id: order.payment_request_id,
@@ -472,6 +500,7 @@ export class PaymentOrchestrator {
           });
         }
 
+        this.#tokenTotalRaw = prepared.token_total_raw;
         this.#transition('PREPARED', {
           token_total_raw: prepared.token_total_raw,
           quote_expires_at: prepared.quote_expires_at,
@@ -758,6 +787,51 @@ export class PaymentOrchestrator {
     });
   }
 
+  #pendingPayment(): LastPaymentRecord | null {
+    const filePath = this.#config.lastPaymentPath;
+
+    if (filePath === undefined) {
+      return null;
+    }
+
+    const record = readLastPayment(filePath);
+
+    if (record === null || isTerminalPaymentState(record.state)) {
+      return null;
+    }
+
+    return record;
+  }
+
+  #refusePending(pending: LastPaymentRecord): PaymentOutcome {
+    const event: TraceEvent = {
+      timestamp: this.#now().toISOString(),
+      fromState: 'INIT',
+      toState: 'FAILED',
+      meta: {
+        reason: 'PENDING_PAYMENT_EXISTS',
+        pending_state: pending.state,
+        pending_payment_id: pending.payment_id ?? null,
+        pending_order_id: pending.order_id ?? null,
+        hint: 'run `npm run resume` or pass --force',
+      },
+    };
+
+    this.#state = 'FAILED';
+    this.#trace.push(event);
+    this.#config.onTrace?.(event);
+
+    return {
+      state: 'FAILED',
+      reason: 'PENDING_PAYMENT_EXISTS',
+      orderId: pending.order_id,
+      flowId: pending.flow_id,
+      paymentRequestId: pending.payment_request_id,
+      paymentId: pending.payment_id,
+      trace: [...this.#trace],
+    };
+  }
+
   #evaluate(
     amountRaw: string,
     token: string,
@@ -794,7 +868,34 @@ export class PaymentOrchestrator {
 
     this.#state = toState;
     this.#trace.push(event);
+    this.#persist();
     this.#config.onTrace?.(event);
+  }
+
+  /**
+   * Writes the checkpoint on every transition. No-op unless `lastPaymentPath`
+   * is configured, which keeps existing unit tests fully in-memory.
+   */
+  #persist(): void {
+    const filePath = this.#config.lastPaymentPath;
+
+    if (filePath === undefined || this.#request === undefined) {
+      return;
+    }
+
+    const record: LastPaymentRecord = {
+      flow_id: this.#flowId,
+      payment_request_id: this.#paymentRequestId,
+      order_id: this.#orderId,
+      payment_id: this.#paymentId,
+      state: this.#state,
+      merchant_name: this.#request.merchantName,
+      token: this.#request.token,
+      token_total_raw: this.#tokenTotalRaw ?? this.#request.amountRaw,
+      updated_at: this.#now().toISOString(),
+    };
+
+    writeLastPayment(filePath, record);
   }
 
   #fail(reason: string, meta?: Record<string, unknown>): PaymentOutcome {

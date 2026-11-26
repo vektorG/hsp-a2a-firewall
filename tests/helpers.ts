@@ -46,6 +46,8 @@ export interface HarnessOptions {
   pollIntervalMs?: number;
   maxPollAttempts?: number;
   maxTimeoutRetries?: number;
+  lastPaymentPath?: string;
+  force?: boolean;
   onTrace?: (event: TraceEvent) => void;
 }
 
@@ -99,6 +101,8 @@ export function createHarness(options: HarnessOptions = {}) {
     pollIntervalMs: options.pollIntervalMs ?? 0,
     maxPollAttempts: options.maxPollAttempts ?? 20,
     maxTimeoutRetries: options.maxTimeoutRetries ?? 3,
+    lastPaymentPath: options.lastPaymentPath,
+    force: options.force,
     onTrace: options.onTrace,
   };
 

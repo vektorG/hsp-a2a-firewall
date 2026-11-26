@@ -37,9 +37,18 @@ export interface IHspMcpClient {
   query_payment(input: QueryPaymentInput): Promise<QueryPaymentOutput>;
 }
 
+/** Local transport/parse failures in addition to server codes. */
+export type HspClientErrorCode =
+  | HspErrorCode
+  | number
+  | 'PARSE_ERROR'
+  | 'TOOL_ERROR'
+  | 'TIMEOUT'
+  | 'TRANSPORT_ERROR';
+
 export class HspMcpError extends Error {
   constructor(
-    readonly code: HspErrorCode | number,
+    readonly code: HspClientErrorCode,
     message: string,
     readonly data?: unknown,
   ) {
@@ -55,7 +64,10 @@ export function isHspMcpError(error: unknown): error is HspMcpError {
 /** True for the re-quote trigger from R2 (error 30043). */
 export function isQuoteExpiredError(error: unknown): boolean {
   if (isHspMcpError(error)) {
-    return error.code === HSP_ERROR_CODES.QUOTE_EXPIRED;
+    return (
+      error.code === HSP_ERROR_CODES.QUOTE_EXPIRED ||
+      error.code === String(HSP_ERROR_CODES.QUOTE_EXPIRED)
+    );
   }
 
   // Tolerate transport layers that surface `{ code, message }` plain objects.
