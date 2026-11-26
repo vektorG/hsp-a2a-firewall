@@ -3,6 +3,7 @@ import { isQuoteExpiredError, type IHspMcpClient } from '../mcp/client.js';
 import type {
   FinalizePaymentOutput,
   PreparePaymentOutput,
+  ServerTypedData,
   SubmitPaymentOutput,
 } from '../mcp/schemas.js';
 import type { PaymentSigner } from './eip712.js';
@@ -61,6 +62,223 @@ export interface PaymentOutcome {
   receiptTxHash?: Hex;
   receiptError?: string;
   trace: TraceEvent[];
+}
+
+export type QuoteMismatchField =
+  | 'payer'
+  | 'amount'
+  | 'recipient'
+  | 'token'
+  | 'chain_id'
+  | 'shape';
+
+/** The approved values the signed quote must match exactly. */
+export interface ApprovedQuoteIntent {
+  payer: string;
+  token: string;
+  tokenTotalRaw?: bigint | string;
+  token_total_raw?: bigint | string;
+  amount?: bigint | string;
+  payTo?: string;
+  pay_to?: string;
+  settlementRecipient?: string;
+  settlement_recipient?: string;
+  spender?: string;
+}
+
+/** Chain configuration fetched live from get_chain_config (R5). */
+export interface LiveChainConfig {
+  chain_id?: number | string;
+  chainId?: number | string;
+}
+
+export type QuoteValidationResult =
+  | { valid: true; allowed: true }
+  | {
+      valid: false;
+      allowed: false;
+      reason: 'POLICY_MISMATCH';
+      field: QuoteMismatchField;
+      details: {
+        field: QuoteMismatchField;
+        expected: string;
+        actual: string;
+      };
+    };
+
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const UNSIGNED_AMOUNT = /^[0-9]+$/;
+
+function mismatch(
+  field: QuoteMismatchField,
+  expected: unknown,
+  actual: unknown,
+): QuoteValidationResult {
+  return {
+    valid: false,
+    allowed: false,
+    reason: 'POLICY_MISMATCH',
+    field,
+    details: {
+      field,
+      expected: expected === undefined ? 'undefined' : String(expected),
+      actual: actual === undefined ? 'undefined' : String(actual),
+    },
+  };
+}
+
+function normalizeAddress(value: unknown): string | null {
+  return typeof value === 'string' && EVM_ADDRESS.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function normalizeAmount(value: unknown): bigint | null {
+  if (typeof value === 'bigint') {
+    return value;
+  }
+  if (typeof value === 'string' && UNSIGNED_AMOUNT.test(value)) {
+    return BigInt(value);
+  }
+  if (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+  ) {
+    return BigInt(value);
+  }
+  return null;
+}
+
+function sameChainId(left: unknown, right: unknown): boolean {
+  try {
+    return BigInt(String(left)) === BigInt(String(right));
+  } catch {
+    return false;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Read-only pre-sign cross-check (PATCH #0.2).
+ *
+ * Verifies the server-supplied EIP-712 payload against the approved intent and
+ * live chain config. It never mutates `eip712`; any mismatch returns
+ * `POLICY_MISMATCH` so the orchestrator can fail before signing.
+ */
+export function validateQuoteAgainstIntent(
+  eip712: ServerTypedData,
+  approvedIntent: ApprovedQuoteIntent,
+  liveConfig: LiveChainConfig,
+): QuoteValidationResult {
+  const message = isRecord(eip712.message) ? eip712.message : null;
+  const domain = isRecord(eip712.domain) ? eip712.domain : null;
+
+  if (!message || !domain) {
+    return mismatch('shape', 'typed data message and domain', 'missing');
+  }
+
+  // 1. message.from must be the payer account.
+  const expectedPayer = normalizeAddress(approvedIntent.payer);
+  const actualFrom = normalizeAddress(message.from);
+
+  if (!expectedPayer || actualFrom !== expectedPayer) {
+    return mismatch('payer', approvedIntent.payer, message.from);
+  }
+
+  // 2. domain.chainId must match live get_chain_config.
+  const liveChainId = liveConfig.chain_id ?? liveConfig.chainId;
+  if (!sameChainId(domain.chainId, liveChainId)) {
+    return mismatch('chain_id', liveChainId, domain.chainId);
+  }
+
+  const approvedToken = normalizeAddress(approvedIntent.token);
+  const approvedAmount = normalizeAmount(
+    approvedIntent.tokenTotalRaw ??
+      approvedIntent.token_total_raw ??
+      approvedIntent.amount,
+  );
+  const approvedPayTo = normalizeAddress(
+    approvedIntent.payTo ?? approvedIntent.pay_to,
+  );
+  const approvedRecipient = normalizeAddress(
+    approvedIntent.settlementRecipient ??
+      approvedIntent.settlement_recipient ??
+      approvedIntent.spender ??
+      approvedIntent.payTo ??
+      approvedIntent.pay_to,
+  );
+
+  const permitted = isRecord(message.permitted) ? message.permitted : null;
+
+  if (permitted) {
+    // Permit2: permitted.amount / permitted.token / spender.
+    const actualAmount = normalizeAmount(permitted.amount);
+    if (
+      approvedAmount === null ||
+      actualAmount === null ||
+      actualAmount !== approvedAmount
+    ) {
+      return mismatch(
+        'amount',
+        approvedAmount === null ? 'invalid approved amount' : approvedAmount,
+        permitted.amount,
+      );
+    }
+
+    const actualToken = normalizeAddress(permitted.token);
+    if (!approvedToken || actualToken !== approvedToken) {
+      return mismatch('token', approvedIntent.token, permitted.token);
+    }
+
+    const actualSpender = normalizeAddress(message.spender);
+    if (!approvedRecipient || actualSpender !== approvedRecipient) {
+      return mismatch(
+        'recipient',
+        approvedRecipient ?? 'invalid settlement recipient',
+        message.spender,
+      );
+    }
+
+    return { valid: true, allowed: true };
+  }
+
+  // EIP-3009: value / to / domain.verifyingContract.
+  const actualValue = normalizeAmount(message.value);
+  if (
+    approvedAmount === null ||
+    actualValue === null ||
+    actualValue !== approvedAmount
+  ) {
+    return mismatch(
+      'amount',
+      approvedAmount === null ? 'invalid approved amount' : approvedAmount,
+      message.value,
+    );
+  }
+
+  const actualTo = normalizeAddress(message.to);
+  if (!approvedPayTo || actualTo !== approvedPayTo) {
+    return mismatch(
+      'recipient',
+      approvedPayTo ?? 'invalid pay_to',
+      message.to,
+    );
+  }
+
+  const actualVerifyingContract = normalizeAddress(domain.verifyingContract);
+  if (!approvedToken || actualVerifyingContract !== approvedToken) {
+    return mismatch(
+      'token',
+      approvedIntent.token,
+      domain.verifyingContract,
+    );
+  }
+
+  return { valid: true, allowed: true };
 }
 
 export interface PaymentOrchestratorConfig {
@@ -187,6 +405,9 @@ export class PaymentOrchestrator {
       quote_expires_at: order.quote_expires_at,
     });
 
+    // Live chain config for the pre-sign cross-check (R5: runtime-only).
+    const liveConfig = await this.#config.client.get_chain_config({});
+
     // ---- prepare -> policy -> sign -> finalize -> submit, with max one
     // automatic re-quote on the SAME order (R2). A 30043 from prepare,
     // finalize or submit all take this same path; create_order is NEVER
@@ -273,6 +494,30 @@ export class PaymentOrchestrator {
 
       if (!postDecision.allowed) {
         return this.#fail(postDecision.reason, { policy: postDecision });
+      }
+
+      // ---- Pre-sign cross-check (PATCH #0.2). Read-only. Any mismatch
+      // fails POLICY_MISMATCH before the signer is ever invoked. --------
+      const validation = validateQuoteAgainstIntent(
+        prepared.eip712,
+        {
+          payer: this.#config.signer.address,
+          token: request.token,
+          tokenTotalRaw: prepared.token_total_raw,
+          payTo: prepared.pay_to,
+          settlementRecipient: prepared.pay_to,
+        },
+        liveConfig,
+      );
+
+      if (!validation.valid) {
+        return this.#fail('POLICY_MISMATCH', {
+          phase: 'pre_sign',
+          check: validation.field,
+          expected: validation.details.expected,
+          actual: validation.details.actual,
+          validation,
+        });
       }
 
       // ---- Production signing path only (R1). -------------------------
