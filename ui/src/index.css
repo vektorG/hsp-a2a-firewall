@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-void font-mono text-slate-200 antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% -10%, rgba(94, 234, 212, 0.12), transparent 70%),
+    radial-gradient(ellipse 55% 35% at 100% 20%, rgba(125, 211, 252, 0.06), transparent 70%),
+    linear-gradient(rgba(26, 40, 50, 0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 40, 50, 0.22) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+  background-attachment: fixed;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.018) 0,
+    rgba(255, 255, 255, 0.018) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: soft-light;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+::selection {
+  background: rgba(94, 234, 212, 0.28);
+  color: #f8fafc;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1a2832 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #1a2832;
+  border-radius: 999px;
+}
+
+.crt {
+  position: relative;
+  overflow: hidden;
+}
+
+.crt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(94, 234, 212, 0.045) 50%,
+    transparent 100%
+  );
+  animation: sweep 7s linear infinite;
+}
+
+@layer components {
+  .field {
+    @apply w-full border border-edge/90 bg-void/70 px-3 py-2 text-xs text-slate-100 outline-none transition placeholder:text-dim/50 focus:border-mint/60 focus:ring-1 focus:ring-mint/20;
+  }
+
+  .label {
+    @apply text-[10px] font-medium uppercase tracking-[0.22em] text-dim/80;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 border border-edge/80 bg-void/60 px-1.5 py-0.5 text-[10px] text-slate-300;
+  }
+}

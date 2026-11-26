@@ -94,6 +94,67 @@ export const MOCK_EXAMPLE_DOMAIN_VERSION = '1';
 /** EXAMPLE chain id — mock fixture only; overridable in the constructor. */
 export const MOCK_EXAMPLE_CHAIN_ID = 133;
 
+export type MockChainProfileId = 'hsk-testnet' | 'sepolia';
+
+/**
+ * A switchable mock network profile. The UI dashboard reads every chain,
+ * token and explorer value from `get_chain_config`; nothing is hardcoded
+ * client-side. These are fixtures, never production configuration (R5).
+ */
+export interface MockChainProfile {
+  id: MockChainProfileId;
+  label: string;
+  chainId: number;
+  chainName: string;
+  token: {
+    address: Address;
+    symbol: string;
+    name: string;
+    decimals: number;
+  };
+  permit2: Address;
+  explorerUrl: string;
+  paymentProtocol: string;
+  gasFeeAdvanced: boolean;
+}
+
+export const MOCK_CHAIN_PROFILES: Record<MockChainProfileId, MockChainProfile> = {
+  'hsk-testnet': {
+    id: 'hsk-testnet',
+    label: 'HSK Testnet',
+    chainId: 133,
+    chainName: 'HSK Testnet',
+    token: {
+      address:
+        '0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6' as Address,
+      symbol: 'eHSK',
+      name: 'HSK Test Token',
+      decimals: 6,
+    },
+    permit2: MOCK_EXAMPLE_PERMIT2,
+    explorerUrl: 'https://explorer.testnet.hsk.xyz',
+    paymentProtocol: 'EIP-3009',
+    gasFeeAdvanced: true,
+  },
+  sepolia: {
+    id: 'sepolia',
+    label: 'Ethereum Sepolia — official QA rail',
+    chainId: 11155111,
+    chainName: 'Ethereum Sepolia',
+    token: {
+      address:
+        '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' as Address,
+      symbol: 'USDC',
+      name: 'USD Coin',
+      decimals: 6,
+    },
+    permit2: MOCK_EXAMPLE_PERMIT2,
+    explorerUrl: 'https://sepolia.etherscan.io',
+    paymentProtocol: 'EIP-3009',
+    gasFeeAdvanced: false,
+  },
+};
+
 export type MockScenario =
   | 'happy'
   | 'timeout-then-finalized'
@@ -111,6 +172,8 @@ export interface MockHspMcpClientOptions {
   merchantName?: string;
   /** Overrides the example fixture; never read from core. */
   chainId?: number;
+  /** Switchable chain/token/explorer profile returned by get_chain_config. */
+  profile?: MockChainProfileId;
   now?: () => Date;
 }
 
@@ -158,6 +221,7 @@ export class MockHspMcpClient implements IHspMcpClient {
 
   readonly #merchantName: string;
   readonly #chainId: number;
+  readonly #profile: MockChainProfile;
   readonly #now: () => Date;
   readonly #orders = new Map<string, MockOrderRecord>();
   readonly #payments = new Map<string, { orderId: string }>();
@@ -168,8 +232,14 @@ export class MockHspMcpClient implements IHspMcpClient {
   constructor(options: MockHspMcpClientOptions) {
     this.scenario = options.scenario;
     this.#merchantName = options.merchantName ?? 'kolit_vlom';
-    this.#chainId = options.chainId ?? MOCK_EXAMPLE_CHAIN_ID;
+    this.#profile =
+      MOCK_CHAIN_PROFILES[options.profile ?? 'hsk-testnet'];
+    this.#chainId = options.chainId ?? this.#profile.chainId;
     this.#now = options.now ?? (() => new Date());
+  }
+
+  get profile(): MockChainProfile {
+    return this.#profile;
   }
 
   async get_chain_config(
@@ -178,14 +248,12 @@ export class MockHspMcpClient implements IHspMcpClient {
     this.calls.get_chain_config.push(input);
     return {
       chain_id: this.#chainId,
-      chain_name: 'Example HSP Testnet',
-      token: {
-        address: MOCK_EXAMPLE_TOKEN,
-        symbol: 'eHSK',
-        name: 'Example HSP Token',
-        decimals: 6,
-      },
-      permit2: MOCK_EXAMPLE_PERMIT2,
+      chain_name: this.#profile.chainName,
+      token: this.#profile.token,
+      permit2: this.#profile.permit2,
+      explorer_url: this.#profile.explorerUrl,
+      payment_protocol: this.#profile.paymentProtocol,
+      gas_fee_advanced: this.#profile.gasFeeAdvanced,
     };
   }
 

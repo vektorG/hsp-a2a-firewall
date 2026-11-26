@@ -151,6 +151,10 @@ export const getChainConfigOutputSchema = z.object({
   /** Permit2 contract address, when the chain uses Permit2. Runtime-only (R5). */
   permit2: evmAddressSchema.optional(),
   explorer_url: z.string().url().optional(),
+  /** Settlement primitive advertised by the rail (e.g. EIP-3009, Permit2). */
+  payment_protocol: z.string().optional(),
+  /** True when the rail manages gas/fees on the payer's behalf. */
+  gas_fee_advanced: z.boolean().optional(),
 });
 
 export type GetChainConfigInput = z.infer<typeof getChainConfigInputSchema>;
