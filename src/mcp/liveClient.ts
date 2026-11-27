@@ -236,7 +236,16 @@ export class LiveHspMcpClient implements IHspMcpClient {
   }
 
   get tokens(): TokenConfig[] {
-    return this.#chainConfig ? [this.#chainConfig.token] : [];
+    if (!this.#chainConfig) {
+      return [];
+    }
+
+    const advertised = this.#chainConfig.tokens;
+    if (advertised !== undefined && advertised.length > 0) {
+      return advertised;
+    }
+
+    return [this.#chainConfig.token];
   }
 
   get payment_protocol(): string | undefined {
@@ -435,8 +444,20 @@ export class LiveHspMcpClient implements IHspMcpClient {
     parsed: unknown,
     raw: string,
   ): unknown {
+    // Reconcile the guide's `tokens[]` array with the single-token convenience
+    // field the rest of the codebase uses. Nothing is dropped: `tokens` stays
+    // on the object (the schema is passthrough).
+    const candidate =
+      name === 'get_chain_config' &&
+      isRecord(parsed) &&
+      parsed.token === undefined &&
+      Array.isArray(parsed.tokens) &&
+      parsed.tokens.length > 0
+        ? { ...parsed, token: parsed.tokens[0] }
+        : parsed;
+
     const schema = hspToolSchemas[name].output;
-    const validated = schema.safeParse(parsed);
+    const validated = schema.safeParse(candidate);
 
     if (!validated.success) {
       const issues = validated.error.issues
@@ -483,11 +504,10 @@ export class LiveHspMcpClient implements IHspMcpClient {
       return true;
     }
 
-    return (
-      error.code === 'TRANSPORT_ERROR' ||
-      error.code === 'TIMEOUT' ||
-      error.code === 'PARSE_ERROR'
-    );
+    // Only transport-level failures are safe to retry. A PARSE_ERROR means the
+    // server answered with an unexpected payload; retrying cannot fix that and
+    // could hide a schema drift.
+    return error.code === 'TRANSPORT_ERROR' || error.code === 'TIMEOUT';
   }
 
   async #withTimeout<T>(

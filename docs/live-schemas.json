@@ -1,0 +1,39 @@
+{
+  "fetchedAt": "2026-11-27T13:07:29.114Z",
+  "url": "https://mcp-qa.hashkeymerchant.com/",
+  "source": "mock",
+  "tools": [
+    {
+      "name": "get_chain_config",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "create_order",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "get_order",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "prepare_payment",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "finalize_payment",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "estimate_fee",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "submit_payment",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    },
+    {
+      "name": "query_payment",
+      "description": "Local schema placeholder (mock dump, no live call)."
+    }
+  ]
+}

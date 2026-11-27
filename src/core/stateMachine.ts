@@ -1,6 +1,7 @@
 import type { Address, Hex } from 'viem';
 import { isQuoteExpiredError, type IHspMcpClient } from '../mcp/client.js';
 import type {
+  FinalizePaymentInput,
   FinalizePaymentOutput,
   PreparePaymentOutput,
   ServerTypedData,
@@ -52,6 +53,8 @@ export interface PaymentRequest {
   token: string;
   /** Raw base units, decimal string. */
   amountRaw: string;
+  /** Optional merchant payout address forwarded to create_order. */
+  payTo?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -318,6 +321,30 @@ const DEFAULT_MAX_POLL_ATTEMPTS = 60;
 const DEFAULT_MAX_TIMEOUT_RETRIES = 3;
 const UNSIGNED_INTEGER = /^(?:0|[1-9][0-9]*)$/;
 
+/**
+ * Everything prepare_payment returned except the fields the orchestrator
+ * consumes locally. The live rail may attach opaque echo fields (for example
+ * `payment_payload` / `payment_mandate_contents`); they must reach
+ * finalize_payment unchanged or the server rejects the finalize.
+ */
+function prepareEchoFields(
+  prepared: PreparePaymentOutput,
+): Record<string, unknown> {
+  const {
+    order_id: _orderId,
+    flow_id: _flowId,
+    payment_request_id: _paymentRequestId,
+    eip712: _eip712,
+    token_total_raw: _tokenTotalRaw,
+    quote_expires_at: _quoteExpiresAt,
+    pay_to: _payTo,
+    permit2: _permit2,
+    ...echo
+  } = prepared as PreparePaymentOutput & Record<string, unknown>;
+
+  return echo;
+}
+
 function defaultSleep(ms: number): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve();
@@ -419,6 +446,7 @@ export class PaymentOrchestrator {
       merchant_name: request.merchantName,
       token: request.token,
       amount: request.amountRaw,
+      pay_to: request.payTo,
       metadata: request.metadata,
     });
 
@@ -558,11 +586,12 @@ export class PaymentOrchestrator {
 
       try {
         finalized = await this.#config.client.finalize_payment({
+          ...prepareEchoFields(prepared),
           order_id: order.order_id,
           payment_request_id: order.payment_request_id,
           payer: this.#config.signer.address,
           signature,
-        });
+        } as FinalizePaymentInput);
       } catch (error) {
         if (isQuoteExpiredError(error)) {
           if (requotes < 1) {
@@ -873,13 +902,22 @@ export class PaymentOrchestrator {
   }
 
   /**
-   * Writes the checkpoint on every transition. No-op unless `lastPaymentPath`
-   * is configured, which keeps existing unit tests fully in-memory.
+   * Writes the checkpoint on every transition after an order exists. No-op
+   * unless `lastPaymentPath` is configured, which keeps existing unit tests
+   * fully in-memory.
+   *
+   * Pre-order states are intentionally not persisted: a policy block before
+   * `create_order` leaves nothing to resume on-chain and must never trip the
+   * resume guard on the next payment.
    */
   #persist(): void {
     const filePath = this.#config.lastPaymentPath;
 
-    if (filePath === undefined || this.#request === undefined) {
+    if (
+      filePath === undefined ||
+      this.#request === undefined ||
+      this.#orderId === undefined
+    ) {
       return;
     }
 
@@ -892,6 +930,7 @@ export class PaymentOrchestrator {
       merchant_name: this.#request.merchantName,
       token: this.#request.token,
       token_total_raw: this.#tokenTotalRaw ?? this.#request.amountRaw,
+      tx_signature: this.#txSignature ?? null,
       updated_at: this.#now().toISOString(),
     };
 

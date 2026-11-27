@@ -13,7 +13,11 @@
     "compile:contracts": "tsx scripts/compile.ts",
     "deploy:testnet": "tsx scripts/deploy.ts",
     "serve:trace": "tsx scripts/serve-trace.ts",
-    "mcp:dump": "tsx scripts/mcp-dump.ts"
+    "mcp:dump": "tsx scripts/mcp-dump.ts",
+    "preflight": "tsx scripts/preflight.ts",
+    "approve": "tsx scripts/approve.ts",
+    "demo-payment": "tsx scripts/demo-payment.ts",
+    "resume": "tsx scripts/resume.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

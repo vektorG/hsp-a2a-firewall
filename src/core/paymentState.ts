@@ -21,11 +21,21 @@ export interface LastPaymentRecord {
   token_total_raw?: string;
   /** Present once the on-chain receipt has been recorded (resume idempotency). */
   receipt_tx_hash?: string;
+  /** Last observed payment transaction hash, when known. */
+  tx_signature?: string | null;
   updated_at: string;
 }
 
-/** Terminal states never block a new payment. */
-export const TERMINAL_PAYMENT_STATES = ['SETTLED', 'FAILED'] as const;
+/**
+ * Terminal states never block a new payment. `POLICY_BLOCKED` is included for
+ * forward compatibility: a pre-order policy block leaves no order/signature on
+ * the wire, so it must never trip the resume guard.
+ */
+export const TERMINAL_PAYMENT_STATES = [
+  'SETTLED',
+  'FAILED',
+  'POLICY_BLOCKED',
+] as const;
 
 const TERMINAL = new Set<string>(TERMINAL_PAYMENT_STATES);
 

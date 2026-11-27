@@ -95,10 +95,12 @@ export type HspErrorResponse = z.infer<typeof hspErrorResponseSchema>;
 // EIP-712
 // ---------------------------------------------------------------------------
 
-export const typedDataFieldSchema = z.object({
-  name: z.string(),
-  type: z.string(),
-});
+export const typedDataFieldSchema = z
+  .object({
+    name: z.string(),
+    type: z.string(),
+  })
+  .passthrough();
 
 export const typedDataTypesSchema = z.record(
   z.string(),
@@ -120,12 +122,15 @@ export const typedDataDomainSchema = z
  * verbatim (R1); only the `EIP712Domain` type entry is stripped because viem
  * derives the domain separator from `domain`.
  */
-export const serverTypedDataSchema = z.object({
-  domain: typedDataDomainSchema,
-  types: typedDataTypesSchema,
-  primaryType: z.string().min(1),
-  message: z.record(z.string(), z.unknown()),
-});
+export const serverTypedDataSchema = z
+  .object({
+    domain: typedDataDomainSchema,
+    types: typedDataTypesSchema,
+    primaryType: z.string().min(1),
+    // A record already echoes every key the server sent.
+    message: z.record(z.string(), z.unknown()),
+  })
+  .passthrough();
 
 export type ServerTypedData = z.infer<typeof serverTypedDataSchema>;
 
@@ -133,29 +138,41 @@ export type ServerTypedData = z.infer<typeof serverTypedDataSchema>;
 // 1. get_chain_config
 // ---------------------------------------------------------------------------
 
-export const tokenConfigSchema = z.object({
-  address: evmAddressSchema,
-  symbol: z.string(),
-  decimals: z.number().int().min(0),
-  name: z.string().optional(),
-});
+export const tokenConfigSchema = z
+  .object({
+    address: evmAddressSchema,
+    symbol: z.string(),
+    decimals: z.number().int().min(0),
+    name: z.string().optional(),
+  })
+  .passthrough();
 
 export type TokenConfig = z.infer<typeof tokenConfigSchema>;
 
 export const getChainConfigInputSchema = z.object({});
 
-export const getChainConfigOutputSchema = z.object({
-  chain_id: chainIdSchema,
-  chain_name: z.string().optional(),
-  token: tokenConfigSchema,
-  /** Permit2 contract address, when the chain uses Permit2. Runtime-only (R5). */
-  permit2: evmAddressSchema.optional(),
-  explorer_url: z.string().url().optional(),
-  /** Settlement primitive advertised by the rail (e.g. EIP-3009, Permit2). */
-  payment_protocol: z.string().optional(),
-  /** True when the rail manages gas/fees on the payer's behalf. */
-  gas_fee_advanced: z.boolean().optional(),
-});
+/**
+ * The live rail guide describes tokens as `tokens[]` (an array). Keep `token`
+ * as the single-token convenience field the rest of the codebase already uses,
+ * and carry `tokens` through untouched so the live dump and future multi-token
+ * chains are not lossy. `LiveHspMcpClient` normalizes `tokens[]` -> `token`
+ * before validation when the server omits the convenience field.
+ */
+export const getChainConfigOutputSchema = z
+  .object({
+    chain_id: chainIdSchema,
+    chain_name: z.string().optional(),
+    token: tokenConfigSchema,
+    tokens: z.array(tokenConfigSchema).optional(),
+    /** Permit2 contract address, when the chain uses Permit2. Runtime-only (R5). */
+    permit2: evmAddressSchema.optional(),
+    explorer_url: z.string().url().optional(),
+    /** Settlement primitive advertised by the rail (e.g. EIP-3009, Permit2). */
+    payment_protocol: z.string().optional(),
+    /** True when the rail manages gas/fees on the payer's behalf. */
+    gas_fee_advanced: z.boolean().optional(),
+  })
+  .passthrough();
 
 export type GetChainConfigInput = z.infer<typeof getChainConfigInputSchema>;
 export type GetChainConfigOutput = z.infer<typeof getChainConfigOutputSchema>;
@@ -168,19 +185,23 @@ export const createOrderInputSchema = z.object({
   merchant_name: z.string().min(1),
   token: evmAddressSchema,
   amount: amountRawSchema,
+  /** Merchant payout address, when the rail accepts it at order creation. */
+  pay_to: evmAddressSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const createOrderOutputSchema = z.object({
-  order_id: z.string().min(1),
-  flow_id: z.string().min(1),
-  payment_request_id: z.string().min(1),
-  merchant_name: z.string().optional(),
-  token: evmAddressSchema,
-  amount_raw: amountRawSchema,
-  token_total_raw: amountRawSchema,
-  quote_expires_at: isoDateTimeSchema,
-});
+export const createOrderOutputSchema = z
+  .object({
+    order_id: z.string().min(1),
+    flow_id: z.string().min(1),
+    payment_request_id: z.string().min(1),
+    merchant_name: z.string().optional(),
+    token: evmAddressSchema,
+    amount_raw: amountRawSchema,
+    token_total_raw: amountRawSchema,
+    quote_expires_at: isoDateTimeSchema,
+  })
+  .passthrough();
 
 export type CreateOrderInput = z.infer<typeof createOrderInputSchema>;
 export type CreateOrderOutput = z.infer<typeof createOrderOutputSchema>;
@@ -193,11 +214,13 @@ export const getOrderInputSchema = z.object({
   order_id: z.string().min(1),
 });
 
-export const getOrderOutputSchema = createOrderOutputSchema.extend({
-  status: z.string(),
-  created_at: isoDateTimeSchema.optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+export const getOrderOutputSchema = createOrderOutputSchema
+  .extend({
+    status: z.string(),
+    created_at: isoDateTimeSchema.optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
 
 export type GetOrderInput = z.infer<typeof getOrderInputSchema>;
 export type GetOrderOutput = z.infer<typeof getOrderOutputSchema>;
@@ -213,16 +236,25 @@ export const preparePaymentInputSchema = z.object({
   payer: evmAddressSchema,
 });
 
-export const preparePaymentOutputSchema = z.object({
-  order_id: z.string().min(1),
-  flow_id: z.string().min(1),
-  payment_request_id: z.string().min(1),
-  eip712: serverTypedDataSchema,
-  token_total_raw: amountRawSchema,
-  quote_expires_at: isoDateTimeSchema,
-  pay_to: evmAddressSchema,
-  permit2: evmAddressSchema.optional(),
-});
+/** Opaque server payloads that must be echoed back to `finalize_payment`. */
+export const opaquePayloadSchema = z.object({}).passthrough();
+
+export const preparePaymentOutputSchema = z
+  .object({
+    order_id: z.string().min(1),
+    flow_id: z.string().min(1),
+    payment_request_id: z.string().min(1),
+    eip712: serverTypedDataSchema,
+    token_total_raw: amountRawSchema,
+    quote_expires_at: isoDateTimeSchema,
+    pay_to: evmAddressSchema,
+    permit2: evmAddressSchema.optional(),
+    /** Echoed verbatim to finalize_payment when the live rail returns it. */
+    payment_payload: opaquePayloadSchema.optional(),
+    /** Echoed verbatim to finalize_payment when the live rail returns it. */
+    payment_mandate_contents: opaquePayloadSchema.optional(),
+  })
+  .passthrough();
 
 export type PreparePaymentInput = z.infer<typeof preparePaymentInputSchema>;
 export type PreparePaymentOutput = z.infer<typeof preparePaymentOutputSchema>;
@@ -231,19 +263,25 @@ export type PreparePaymentOutput = z.infer<typeof preparePaymentOutputSchema>;
 // 5. finalize_payment
 // ---------------------------------------------------------------------------
 
-export const finalizePaymentInputSchema = z.object({
-  order_id: z.string().min(1),
-  payment_request_id: z.string().min(1),
-  payer: evmAddressSchema,
-  signature: signatureSchema,
-});
+export const finalizePaymentInputSchema = z
+  .object({
+    order_id: z.string().min(1),
+    payment_request_id: z.string().min(1),
+    payer: evmAddressSchema,
+    signature: signatureSchema,
+    payment_payload: opaquePayloadSchema.optional(),
+    payment_mandate_contents: opaquePayloadSchema.optional(),
+  })
+  .passthrough();
 
-export const finalizePaymentOutputSchema = z.object({
-  payment_id: z.string().min(1),
-  order_id: z.string().min(1),
-  status: paymentStatusSchema,
-  tx_signature: z.string().nullable().optional(),
-});
+export const finalizePaymentOutputSchema = z
+  .object({
+    payment_id: z.string().min(1),
+    order_id: z.string().min(1),
+    status: paymentStatusSchema,
+    tx_signature: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 export type FinalizePaymentInput = z.infer<typeof finalizePaymentInputSchema>;
 export type FinalizePaymentOutput = z.infer<typeof finalizePaymentOutputSchema>;
@@ -257,21 +295,25 @@ export const estimateFeeInputSchema = z.object({
   amount: amountRawSchema,
 });
 
-export const estimateFeeOutputSchema = z.object({
-  token: evmAddressSchema,
-  amount_raw: amountRawSchema,
-  fee_raw: amountRawSchema,
-  fee_token: evmAddressSchema.optional(),
-  total_raw: amountRawSchema,
-  fee_breakdown: z
-    .array(
-      z.object({
-        name: z.string(),
-        amount_raw: amountRawSchema,
-      }),
-    )
-    .optional(),
-});
+export const estimateFeeOutputSchema = z
+  .object({
+    token: evmAddressSchema,
+    amount_raw: amountRawSchema,
+    fee_raw: amountRawSchema,
+    fee_token: evmAddressSchema.optional(),
+    total_raw: amountRawSchema,
+    fee_breakdown: z
+      .array(
+        z
+          .object({
+            name: z.string(),
+            amount_raw: amountRawSchema,
+          })
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
 
 export type EstimateFeeInput = z.infer<typeof estimateFeeInputSchema>;
 export type EstimateFeeOutput = z.infer<typeof estimateFeeOutputSchema>;
@@ -286,12 +328,14 @@ export const submitPaymentInputSchema = z.object({
   signature: signatureSchema,
 });
 
-export const submitPaymentOutputSchema = z.object({
-  payment_id: z.string().min(1),
-  status: paymentStatusSchema,
-  /** Null until the transaction is broadcast (R3). */
-  tx_signature: z.string().nullable().optional(),
-});
+export const submitPaymentOutputSchema = z
+  .object({
+    payment_id: z.string().min(1),
+    status: paymentStatusSchema,
+    /** Null until the transaction is broadcast (R3). */
+    tx_signature: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 export type SubmitPaymentInput = z.infer<typeof submitPaymentInputSchema>;
 export type SubmitPaymentOutput = z.infer<typeof submitPaymentOutputSchema>;
@@ -306,14 +350,16 @@ export const queryPaymentInputSchema = z.object({
   expected_merchant_name: z.string().min(1),
 });
 
-export const queryPaymentOutputSchema = z.object({
-  payment_id: z.string().min(1),
-  status: paymentStatusSchema,
-  tx_signature: z.string().nullable().optional(),
-  attribution_verified: z.boolean().optional(),
-  attribution_merchant_name: z.string().optional(),
-  status_reason: z.string().optional(),
-});
+export const queryPaymentOutputSchema = z
+  .object({
+    payment_id: z.string().min(1),
+    status: paymentStatusSchema,
+    tx_signature: z.string().nullable().optional(),
+    attribution_verified: z.boolean().optional(),
+    attribution_merchant_name: z.string().optional(),
+    status_reason: z.string().optional(),
+  })
+  .passthrough();
 
 export type QueryPaymentInput = z.infer<typeof queryPaymentInputSchema>;
 export type QueryPaymentOutput = z.infer<typeof queryPaymentOutputSchema>;

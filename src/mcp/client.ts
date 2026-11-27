@@ -35,6 +35,8 @@ export interface IHspMcpClient {
   estimate_fee(input: EstimateFeeInput): Promise<EstimateFeeOutput>;
   submit_payment(input: SubmitPaymentInput): Promise<SubmitPaymentOutput>;
   query_payment(input: QueryPaymentInput): Promise<QueryPaymentOutput>;
+  /** Optional transport cleanup; mock clients are already in-memory. */
+  close?(): Promise<void>;
 }
 
 /** Local transport/parse failures in addition to server codes. */
@@ -206,6 +208,7 @@ interface MockOrderRecord {
   paymentRequestId: string;
   merchantName: string;
   token: Address;
+  payTo: Address;
   amountRaw: string;
   tokenTotalRaw: string;
   quoteExpiresAt: Date;
@@ -258,10 +261,15 @@ export class MockHspMcpClient implements IHspMcpClient {
     input: GetChainConfigInput = {},
   ): Promise<GetChainConfigOutput> {
     this.calls.get_chain_config.push(input);
+    const token = this.#profile.token;
+
     return {
       chain_id: this.#chainId,
       chain_name: this.#profile.chainName,
-      token: this.#profile.token,
+      token,
+      // Mirror the live guide shape (`tokens[]`) while keeping the
+      // single-token convenience field above.
+      tokens: [token],
       permit2: this.#profile.permit2,
       explorer_url: this.#profile.explorerUrl,
       payment_protocol: this.#profile.paymentProtocol,
@@ -280,6 +288,7 @@ export class MockHspMcpClient implements IHspMcpClient {
       paymentRequestId: `pr_${this.#orderSequence}`,
       merchantName: input.merchant_name,
       token: input.token as Address,
+      payTo: (input.pay_to as Address | undefined) ?? MOCK_EXAMPLE_PAY_TO,
       amountRaw: input.amount,
       tokenTotalRaw: input.amount,
       quoteExpiresAt: new Date(now.getTime() + 5 * 60_000),
@@ -372,7 +381,7 @@ export class MockHspMcpClient implements IHspMcpClient {
       primaryType: 'TransferWithAuthorization',
       message: {
         from: input.payer,
-        to: MOCK_EXAMPLE_PAY_TO,
+        to: order.payTo,
         value: BigInt(order.tokenTotalRaw),
         validAfter: 0n,
         validBefore: nowSeconds + 3_600n,
@@ -394,7 +403,7 @@ export class MockHspMcpClient implements IHspMcpClient {
       eip712,
       token_total_raw: order.tokenTotalRaw,
       quote_expires_at: expiresAt.toISOString(),
-      pay_to: MOCK_EXAMPLE_PAY_TO,
+      pay_to: order.payTo,
       permit2: MOCK_EXAMPLE_PERMIT2,
     };
   }
