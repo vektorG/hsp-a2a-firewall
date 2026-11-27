@@ -178,7 +178,13 @@ function CallChip({ label, count }: { label: string; count: number }) {
   );
 }
 
-export function Timeline({ record }: { record: PaymentRecord | null }) {
+export function Timeline({
+  record,
+  mode = 'live',
+}: {
+  record: PaymentRecord | null;
+  mode?: 'live' | 'static';
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -199,8 +205,8 @@ export function Timeline({ record }: { record: PaymentRecord | null }) {
 
   return (
     <Panel
-      index="05 / live trace"
-      title="Execution timeline"
+      index={mode === 'static' ? '05 / recorded trace' : '05 / live trace'}
+      title={mode === 'static' ? 'Pre-recorded execution' : 'Execution timeline'}
       actions={actions}
       tone={record?.status === 'FAILED' ? 'danger' : 'default'}
       className="crt"

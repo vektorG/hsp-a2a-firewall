@@ -11,10 +11,24 @@ import type {
 import { cn } from './lib/format';
 import { ChainConfigPanel } from './components/ChainConfigPanel';
 import { DemoControls } from './components/DemoControls';
+import { ArchitecturePanel, EvidencePanel } from './components/Evidence';
 import { PolicyPanel } from './components/PolicyPanel';
 import { ReceiptPanel } from './components/ReceiptPanel';
 import { RoadmapPanel, WhyPanel } from './components/Roadmap';
 import { Timeline } from './components/Timeline';
+import {
+  GITHUB_URL,
+  STATIC_PAYMENTS,
+  staticConfig,
+  staticPaymentForScenario,
+  TEAM_NAME,
+} from './staticPreview';
+
+type Mode = 'loading' | 'live' | 'static';
+
+const IS_GITHUB_PAGES =
+  typeof window !== 'undefined' &&
+  window.location.hostname.endsWith('github.io');
 
 function sortPayments(payments: PaymentRecord[]): PaymentRecord[] {
   return [...payments].sort((left, right) =>
@@ -52,45 +66,73 @@ function ShieldMark() {
 }
 
 export default function App() {
-  const [config, setConfig] = useState<ServerConfig | null>(null);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>(() =>
+    IS_GITHUB_PAGES ? 'static' : 'loading',
+  );
+  const [config, setConfig] = useState<ServerConfig | null>(() =>
+    IS_GITHUB_PAGES ? staticConfig() : null,
+  );
+  const [payments, setPayments] = useState<PaymentRecord[]>(() =>
+    IS_GITHUB_PAGES ? [...STATIC_PAYMENTS] : [],
+  );
+  const [activeId, setActiveId] = useState<string | null>(() =>
+    IS_GITHUB_PAGES ? STATIC_PAYMENTS[0]?.id ?? null : null,
+  );
   const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!IS_GITHUB_PAGES);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<ScenarioId | null>(null);
   const [switching, setSwitching] = useState(false);
   const activeIdRef = useRef<string | null>(null);
+
+  function enterStaticPreview(): void {
+    setMode('static');
+    setConfig(staticConfig());
+    setPayments([...STATIC_PAYMENTS]);
+    setActiveId(STATIC_PAYMENTS[0]?.id ?? null);
+    setConnected(false);
+    setError(null);
+    setLoading(false);
+  }
 
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
 
   useEffect(() => {
+    if (IS_GITHUB_PAGES) {
+      return;
+    }
+
     let cancelled = false;
 
-    Promise.all([api.getConfig(), api.getPayments()])
-      .then(([nextConfig, result]) => {
+    api
+      .getConfig()
+      .then((nextConfig) => {
         if (cancelled) {
           return;
         }
+        setMode('live');
         setConfig(nextConfig);
-        const sorted = sortPayments(result.payments);
-        setPayments(sorted);
-        setActiveId((current) => current ?? sorted[0]?.id ?? null);
+        setLoading(false);
+
+        void api
+          .getPayments()
+          .then((result) => {
+            if (cancelled) {
+              return;
+            }
+            const sorted = sortPayments(result.payments);
+            setPayments(sorted);
+            setActiveId((current) => current ?? sorted[0]?.id ?? null);
+          })
+          .catch(() => {
+            // The live config loaded; an empty history is still a live UI.
+          });
       })
-      .catch((cause: unknown) => {
+      .catch(() => {
         if (!cancelled) {
-          setError(
-            cause instanceof Error
-              ? `${cause.message}. Is the trace server running on ${API_BASE}?`
-              : String(cause),
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
+          enterStaticPreview();
         }
       });
 
@@ -100,6 +142,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (mode !== 'live') {
+      return;
+    }
+
     const source = new EventSource(`${API_BASE}/api/stream`);
 
     source.onopen = () => {
@@ -153,10 +199,19 @@ export default function App() {
     return () => {
       source.close();
     };
-  }, []);
+  }, [mode]);
 
   async function runScenario(scenario: ScenarioId): Promise<void> {
     setError(null);
+
+    if (mode === 'static') {
+      const record = staticPaymentForScenario(scenario);
+      if (record) {
+        setActiveId(record.id);
+      }
+      return;
+    }
+
     setRunning(scenario);
     try {
       const record = await api.runDemo(scenario);
@@ -170,6 +225,11 @@ export default function App() {
   }
 
   async function savePolicy(policy: PolicyFile): Promise<PolicyFile> {
+    if (mode === 'static') {
+      setConfig((current) => (current ? { ...current, policy } : current));
+      return policy;
+    }
+
     const result = await api.savePolicy(policy);
     setConfig((current) =>
       current ? { ...current, policy: result.policy } : current,
@@ -180,6 +240,16 @@ export default function App() {
   async function switchProfile(profile: ProfileId): Promise<void> {
     setSwitching(true);
     setError(null);
+
+    if (mode === 'static') {
+      setConfig((current) => {
+        const next = staticConfig(profile);
+        return { ...next, policy: current?.policy ?? next.policy };
+      });
+      setSwitching(false);
+      return;
+    }
+
     try {
       const nextConfig = await api.setProfile(profile);
       setConfig(nextConfig);
@@ -229,7 +299,7 @@ export default function App() {
                 <span className="text-mint">FIREWALL</span>
               </h1>
               <div className="text-[10px] text-dim">
-                team <span className="text-slate-300">kolit_vlom</span>
+                team <span className="text-slate-300">{TEAM_NAME}</span>
                 <span className="mx-1.5 text-dim/40">·</span>
                 mock-driven trace console
                 <span className="mx-1.5 text-dim/40">·</span>
@@ -263,27 +333,48 @@ export default function App() {
               </div>
             </div>
 
-            <div
-              className={cn(
-                'border px-3 py-2 text-[10px] uppercase tracking-[0.18em]',
-                connected
-                  ? 'border-mint/25 bg-void/40 text-mint'
-                  : 'border-rose/30 bg-rose/5 text-rose',
-              )}
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="border border-edge/80 bg-void/40 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-dim transition hover:border-mint/40 hover:text-mint"
             >
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    'h-1.5 w-1.5',
-                    connected ? 'bg-mint' : 'bg-rose',
-                  )}
-                />
-                SSE {connected ? 'live' : 'offline'}
+              GitHub ↗
+            </a>
+
+            {mode === 'static' ? (
+              <div className="border border-mint/30 bg-mint/5 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-mint">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 bg-mint" />
+                  STATIC DEMO · GITHUB PAGES
+                </div>
+                <div className="mt-0.5 text-[9px] tracking-normal text-dim">
+                  3 pre-recorded traces
+                </div>
               </div>
-              <div className="mt-0.5 text-[9px] tracking-normal text-dim">
-                /api/stream
+            ) : (
+              <div
+                className={cn(
+                  'border px-3 py-2 text-[10px] uppercase tracking-[0.18em]',
+                  connected
+                    ? 'border-mint/25 bg-void/40 text-mint'
+                    : 'border-rose/30 bg-rose/5 text-rose',
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5',
+                      connected ? 'bg-mint' : 'bg-rose',
+                    )}
+                  />
+                  SSE {connected ? 'live' : 'offline'}
+                </div>
+                <div className="mt-0.5 text-[9px] tracking-normal text-dim">
+                  /api/stream
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </header>
@@ -294,6 +385,18 @@ export default function App() {
             {error}
           </div>
         ) : null}
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-5">
+            <ArchitecturePanel />
+          </div>
+          <div className="xl:col-span-3">
+            <EvidencePanel />
+          </div>
+          <div className="xl:col-span-4">
+            <RoadmapPanel />
+          </div>
+        </div>
 
         {config ? (
           <>
@@ -324,6 +427,7 @@ export default function App() {
               scenarios={config.scenarios}
               running={running}
               error={null}
+              mode={mode === 'static' ? 'static' : 'live'}
               onRun={(scenario) => {
                 void runScenario(scenario);
               }}
@@ -368,11 +472,13 @@ export default function App() {
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
               <div className="xl:col-span-8">
-                <Timeline record={active} />
+                <Timeline
+                  record={active}
+                  mode={mode === 'static' ? 'static' : 'live'}
+                />
               </div>
               <div className="space-y-4 xl:col-span-4">
                 <ReceiptPanel record={active} />
-                <RoadmapPanel />
                 <WhyPanel />
               </div>
             </div>
@@ -383,10 +489,19 @@ export default function App() {
       <footer className="mx-auto max-w-[1600px] px-4 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge/60 pt-3 text-[9px] uppercase tracking-[0.18em] text-dim/50">
           <span>
-            a2a payment firewall · stateMachine + MockHspMcpClient · mock only
+            a2a payment firewall · team {TEAM_NAME} · stateMachine +
+            MockHspMcpClient · mock only
           </span>
-          <span>
-            payment rail derived at runtime · receipt anchor HSK Chain
+          <span className="flex flex-wrap items-center gap-2">
+            <span>payment rail derived at runtime · receipt anchor HSK Chain</span>
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-mint/70 underline decoration-mint/30 underline-offset-2 hover:text-mint"
+            >
+              GitHub ↗
+            </a>
           </span>
         </div>
       </footer>

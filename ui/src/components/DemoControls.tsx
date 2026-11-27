@@ -6,6 +6,7 @@ interface DemoControlsProps {
   scenarios: ScenarioSummary[];
   running: ScenarioId | null;
   error: string | null;
+  mode?: 'live' | 'static';
   onRun: (scenario: ScenarioId) => void;
 }
 
@@ -17,16 +18,18 @@ export function DemoControls({
   scenarios,
   running,
   error,
+  mode = 'live',
   onRun,
 }: DemoControlsProps) {
+  const isStatic = mode === 'static';
   return (
     <Panel
       index="04 / demo"
-      title="Firewall scenarios"
+      title={isStatic ? 'Recorded demo traces' : 'Firewall scenarios'}
       actions={
         <>
           <Tag tone="mint">mock MCP</Tag>
-          <Tag>SSE stream</Tag>
+          <Tag>{isStatic ? 'static fixtures' : 'SSE stream'}</Tag>
         </>
       }
     >
@@ -38,7 +41,10 @@ export function DemoControls({
           <span className="text-rose">block</span> = stopped before signature
         </span>
         <span className="text-dim/50">·</span>
-        <span>7 scenarios · one real state machine</span>
+        <span>
+          {scenarios.length} {isStatic ? 'pre-recorded traces' : 'scenarios'} ·
+          one real state machine
+        </span>
         {running ? (
           <span className="ml-auto inline-flex items-center gap-2 text-amber">
             <span className="h-1.5 w-1.5 animate-pulse bg-amber" />
@@ -95,7 +101,11 @@ export function DemoControls({
                     : 'text-mint/50 group-hover:text-mint',
                 )}
               >
-                {isRunning ? 'tracing…' : 'run scenario →'}
+                {isRunning
+                  ? 'tracing…'
+                  : isStatic
+                    ? 'inspect trace →'
+                    : 'run scenario →'}
               </div>
             </button>
           );
