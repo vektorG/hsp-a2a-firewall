@@ -41,12 +41,21 @@ function Rail({
 }
 
 export function ReceiptPanel({ record }: { record: PaymentRecord | null }) {
+  const isMockFixture = record?.request.metadata?.mock === true;
+
   return (
     <Panel
       index="06 / receipt"
       title="Settlement rails"
       actions={<Tag>{record ? record.status : 'idle'}</Tag>}
     >
+      <div className="mb-3 border border-amber/30 bg-amber/[0.06] px-3 py-2 text-[10px] leading-relaxed text-amber/90">
+        <span className="mr-1.5 font-semibold uppercase tracking-[0.16em] text-amber">
+          note
+        </span>
+        Payment/receipt hashes are deterministic mock fixtures (HSP QA IP access
+        pending). The ReceiptRegistry deployment is a real on-chain transaction.
+      </div>
       {!record ? (
         <div className="border border-dashed border-edge/60 bg-void/20 px-3 py-10 text-center text-[10px] text-dim/60">
           run a scenario to see payment and receipt rails
@@ -75,17 +84,21 @@ export function ReceiptPanel({ record }: { record: PaymentRecord | null }) {
 
             <div className="mt-2 border-t border-mint/15 pt-2">
               <div className="label mb-1">payment tx</div>
-              {record.paymentExplorerUrl && record.outcome?.txSignature ? (
+              {record.outcome?.txSignature ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    href={record.paymentExplorerUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-mint/90 underline decoration-mint/30 underline-offset-2 hover:text-mint"
-                  >
-                    view payment tx ↗
-                  </a>
-                  <span className="text-[10px] text-dim">
+                  {isMockFixture ? (
+                    <Tag tone="amber">MOCK FIXTURE</Tag>
+                  ) : record.paymentExplorerUrl ? (
+                    <a
+                      href={record.paymentExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-mint/90 underline decoration-mint/30 underline-offset-2 hover:text-mint"
+                    >
+                      view payment tx ↗
+                    </a>
+                  ) : null}
+                  <span className="break-all text-[10px] text-dim">
                     {shortHash(record.outcome.txSignature, 10, 8)}
                   </span>
                 </div>
@@ -115,17 +128,21 @@ export function ReceiptPanel({ record }: { record: PaymentRecord | null }) {
 
             <div className="mt-2 border-t border-sky/15 pt-2">
               <div className="label mb-1">receipt tx</div>
-              {record.receiptExplorerUrl && record.outcome?.receiptTxHash ? (
+              {record.outcome?.receiptTxHash ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <a
-                    href={record.receiptExplorerUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-sky/90 underline decoration-sky/30 underline-offset-2 hover:text-sky"
-                  >
-                    view receipt anchor ↗
-                  </a>
-                  <span className="text-[10px] text-dim">
+                  {isMockFixture ? (
+                    <Tag tone="amber">MOCK FIXTURE</Tag>
+                  ) : record.receiptExplorerUrl ? (
+                    <a
+                      href={record.receiptExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-sky/90 underline decoration-sky/30 underline-offset-2 hover:text-sky"
+                    >
+                      view receipt anchor ↗
+                    </a>
+                  ) : null}
+                  <span className="break-all text-[10px] text-dim">
                     {shortHash(record.outcome.receiptTxHash, 10, 8)}
                   </span>
                 </div>
@@ -160,9 +177,9 @@ export function ReceiptPanel({ record }: { record: PaymentRecord | null }) {
           </div>
 
           <p className="border-l border-edge/60 pl-3 text-[9px] leading-relaxed text-dim/60">
-            Demo rails: payment hash and receipt hash are deterministic mock
-            fixtures. Links resolve against the active chain config returned by
-            the server; the receipt anchor always targets HSK Chain.
+            Demo rails: payment and receipt hashes are deterministic mock
+            fixtures, badged MOCK FIXTURE and never hyperlinked. The
+            ReceiptRegistry address is the real HSK Chain deployment.
           </p>
         </div>
       )}

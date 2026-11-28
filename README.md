@@ -39,8 +39,8 @@ npm run demo-payment -- --mock   # tagged mode=mock, no real tx
 ## On-chain evidence
 - ReceiptRegistry (HSK testnet 133): 0x5a2e50040dd7242231ee593cf61f5d34e15ef121
 - Deploy tx: 0xddec5941b902b99f7139338ac79562d261d6762230f327d4d88bfcb56c5e623f
-- Live payment tx: <fill after live run>
-- Receipt tx: <fill after live run>
+- Live payment tx: pending HSP QA IP allowlist
+- Receipt tx: pending HSP QA IP allowlist
 
 ## Roadmap
 Phase 1 (hackathon): policy firewall + HSP settlement + receipt registry + trace UI.
@@ -53,3 +53,9 @@ Demo Day finalists.
 
 ## Team
 kolit_vlom (solo). GitHub: vektorG/hsp-a2a-firewall.
+
+## Links
+- Website: https://vektorg.github.io/hsp-a2a-firewall/
+- GitHub: https://github.com/vektorG/hsp-a2a-firewall
+- X: https://x.com/simon_zxc
+- Demo video: <YouTube link pending>

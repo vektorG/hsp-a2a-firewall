@@ -23,7 +23,7 @@ const PROFILE_SUMMARIES = [
     label: 'HSK Testnet',
     chainId: 133,
     chainName: 'HSK Testnet',
-    tokenSymbol: 'eHSK',
+    tokenSymbol: 'USDC',
   },
   {
     id: 'sepolia' as const,
@@ -40,8 +40,8 @@ const CHAINS: Record<ProfileId, ChainConfig> = {
     chain_name: 'HSK Testnet',
     token: {
       address: '0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6',
-      symbol: 'eHSK',
-      name: 'HSK Test Token',
+      symbol: 'USDC',
+      name: 'USD Coin',
       decimals: 6,
     },
     permit2: '0x2222222222222222222222222222222222222222',

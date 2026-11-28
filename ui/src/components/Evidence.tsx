@@ -90,7 +90,7 @@ export function EvidencePanel() {
           <CopyValue
             value={RECEIPT_REGISTRY_ADDRESS}
             href={`${STATIC_RECEIPT.explorerUrl}/address/${RECEIPT_REGISTRY_ADDRESS}`}
-            display={RECEIPT_REGISTRY_ADDRESS}
+            display={shortHash(RECEIPT_REGISTRY_ADDRESS, 12, 8)}
           />
           <div className="mt-1 text-[9px] text-dim/60">
             chain {STATIC_RECEIPT.chainId} · deployed{' '}
