@@ -22,26 +22,28 @@ export function CopyValue({
   }
 
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
+    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
       {href ? (
         <a
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="truncate text-mint/90 underline decoration-mint/30 underline-offset-2 transition hover:text-mint"
+          className="truncate font-mono text-xs text-accent transition hover:text-accent-hover hover:underline hover:underline-offset-2"
         >
           {display ?? value}
         </a>
       ) : (
-        <span className="truncate text-slate-200">{display ?? value}</span>
+        <span className="truncate font-mono text-xs text-ink">
+          {display ?? value}
+        </span>
       )}
       <button
         type="button"
         onClick={copy}
-        className="shrink-0 border border-edge/70 px-1 py-0.5 text-[9px] uppercase tracking-wider text-dim transition hover:border-mint/40 hover:text-mint"
+        className="shrink-0 rounded-md border border-edge px-2 py-0.5 text-[11px] text-muted transition hover:border-edge-hover hover:text-ink"
         title="Copy value"
       >
-        {copied ? 'ok' : 'cp'}
+        {copied ? 'Copied' : 'Copy'}
       </button>
     </span>
   );

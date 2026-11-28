@@ -1,62 +1,68 @@
-import type { ScenarioId, ScenarioSummary } from '../types';
+import type { PaymentRecord, ScenarioId, ScenarioSummary } from '../types';
 import { cn } from '../lib/format';
-import { Panel, Tag } from './Panel';
 
 interface DemoControlsProps {
   scenarios: ScenarioSummary[];
+  records?: PaymentRecord[];
+  activeScenario?: ScenarioId;
   running: ScenarioId | null;
   error: string | null;
   mode?: 'live' | 'static';
   onRun: (scenario: ScenarioId) => void;
 }
 
-function indexLabel(index: number): string {
-  return String(index + 1).padStart(2, '0');
+const SCENARIO_SLUG: Record<ScenarioId, string> = {
+  happy: '01-happy',
+  'malicious-invoice': '02-malicious-invoice',
+  'over-limit': '03-over-limit',
+  'untrusted-merchant': '04-untrusted-merchant',
+  'tampered-quote': '05-tampered-quote',
+  'quote-expired-requote': '06-quote-expired',
+  timeout: '07-timeout',
+};
+
+function scenarioTitle(label: string): string {
+  const parts = label.split(' · ');
+  return parts[parts.length - 1] ?? label;
 }
 
 export function DemoControls({
   scenarios,
+  records = [],
+  activeScenario,
   running,
   error,
   mode = 'live',
   onRun,
 }: DemoControlsProps) {
-  const isStatic = mode === 'static';
   return (
-    <Panel
-      index="04 / demo"
-      title={isStatic ? 'Recorded demo traces' : 'Firewall scenarios'}
-      actions={
-        <>
-          <Tag tone="mint">mock MCP</Tag>
-          <Tag>{isStatic ? 'static fixtures' : 'SSE stream'}</Tag>
-        </>
-      }
-    >
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-dim">
-        <span>
-          <span className="text-mint">pass</span> = reaches settlement
-        </span>
-        <span>
-          <span className="text-rose">block</span> = stopped before signature
-        </span>
-        <span className="text-dim/50">·</span>
-        <span>
-          {scenarios.length} {isStatic ? 'pre-recorded traces' : 'scenarios'} ·
-          one real state machine
-        </span>
+    <section aria-label="Scenarios">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-semibold text-ink">Scenarios</h2>
+          <span className="text-xs text-faint">
+            {mode === 'static'
+              ? `${scenarios.length} pre-recorded traces`
+              : `${scenarios.length} available · one real state machine`}
+          </span>
+        </div>
         {running ? (
-          <span className="ml-auto inline-flex items-center gap-2 text-amber">
-            <span className="h-1.5 w-1.5 animate-pulse bg-amber" />
-            streaming {running}
+          <span className="inline-flex items-center gap-2 text-xs text-warning">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
+            Running {SCENARIO_SLUG[running]}
           </span>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {scenarios.map((scenario, index) => {
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {scenarios.map((scenario) => {
+          const record = records.find(
+            (payment) => payment.scenario === scenario.id,
+          );
           const blocked = scenario.verdict === 'blocked';
+          const active = activeScenario === scenario.id;
           const isRunning = running === scenario.id;
+
           return (
             <button
               key={scenario.id}
@@ -64,76 +70,55 @@ export function DemoControls({
               disabled={running !== null}
               onClick={() => onRun(scenario.id)}
               className={cn(
-                'group relative overflow-hidden border bg-void/40 p-3 text-left transition',
-                'disabled:cursor-wait disabled:opacity-60',
-                blocked
-                  ? 'border-rose/25 hover:border-rose/60 hover:bg-rose/5'
-                  : 'border-mint/20 hover:border-mint/50 hover:bg-mint/5',
-                isRunning && 'border-amber/60 bg-amber/5',
+                'rounded-lg border bg-surface p-4 text-left transition disabled:cursor-wait disabled:opacity-70',
+                active
+                  ? 'border-accent bg-accent/[0.06]'
+                  : 'border-edge hover:border-edge-hover hover:bg-elevated',
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-[10px] text-dim/60">
-                  {indexLabel(index)}
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-faint">
+                  {record?.id ?? SCENARIO_SLUG[scenario.id]}
                 </span>
                 <span
                   className={cn(
-                    'border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.15em]',
-                    blocked
-                      ? 'border-rose/30 bg-rose/10 text-rose'
-                      : 'border-mint/25 bg-mint/10 text-mint',
+                    'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[10px] font-medium',
+                    isRunning
+                      ? 'border-warning/30 bg-warning/10 text-warning'
+                      : blocked
+                        ? 'border-danger/30 bg-danger/10 text-danger'
+                        : 'border-success/30 bg-success/10 text-success',
                   )}
                 >
-                  {isRunning ? 'running' : blocked ? 'block' : 'pass'}
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      isRunning
+                        ? 'animate-pulse bg-warning'
+                        : blocked
+                          ? 'bg-danger'
+                          : 'bg-success',
+                    )}
+                  />
+                  {isRunning ? 'RUN' : blocked ? 'BLOCKED' : 'PASS'}
                 </span>
               </div>
-              <div className="mt-2 text-[12px] font-semibold leading-snug text-slate-100">
-                {scenario.label}
+              <div className="mt-2 text-sm font-semibold text-ink">
+                {scenarioTitle(scenario.label)}
               </div>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-dim">
+              <p className="mt-1 text-xs leading-relaxed text-muted">
                 {scenario.note}
               </p>
-              <div
-                className={cn(
-                  'mt-3 text-[9px] uppercase tracking-[0.2em]',
-                  blocked
-                    ? 'text-rose/50 group-hover:text-rose'
-                    : 'text-mint/50 group-hover:text-mint',
-                )}
-              >
-                {isRunning
-                  ? 'tracing…'
-                  : isStatic
-                    ? 'inspect trace →'
-                    : 'run scenario →'}
-              </div>
             </button>
           );
         })}
-
-        <div className="flex min-h-[120px] flex-col justify-between border border-dashed border-edge/50 bg-void/20 p-3">
-          <div>
-            <div className="text-[9px] uppercase tracking-[0.2em] text-dim/50">
-              guardrail invariant
-            </div>
-            <p className="mt-2 text-[10px] leading-relaxed text-dim">
-              Every run starts from the persisted policy and a fresh spend
-              ledger. Re-quote scenarios must show{' '}
-              <span className="text-amber">prepare ×2</span> with{' '}
-              <span className="text-mint">create_order ×1</span>.
-            </p>
-          </div>
-          <div className="mt-3 text-[9px] uppercase tracking-[0.2em] text-dim/40">
-            no live MCP calls
-          </div>
-        </div>
       </div>
 
       {error ? (
-        <div className="mt-3 border border-rose/40 bg-rose/10 px-3 py-2 text-[11px] text-rose">
+        <div className="mt-3 rounded-md border border-danger/30 bg-danger/10 px-4 py-2.5 text-xs text-danger">
           {error}
         </div>
       ) : null}
-    </Panel>
+    </section>
   );
 }

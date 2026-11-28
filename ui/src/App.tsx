@@ -25,6 +25,13 @@ import {
 } from './staticPreview';
 
 type Mode = 'loading' | 'live' | 'static';
+type Tab = 'debugger' | 'policy' | 'architecture';
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'debugger', label: 'Debugger' },
+  { id: 'policy', label: 'Policy & Network' },
+  { id: 'architecture', label: 'Architecture' },
+];
 
 const IS_GITHUB_PAGES =
   typeof window !== 'undefined' &&
@@ -53,15 +60,50 @@ function ShieldMark() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-6 w-6"
+      className="h-4 w-4"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.6"
       aria-hidden
     >
       <path d="M12 3 5 6v5.2c0 4.4 2.9 8.2 7 9.8 4.1-1.6 7-5.4 7-9.8V6l-7-3Z" />
       <path d="M9.2 12.1l1.9 1.9 3.8-3.9" />
     </svg>
+  );
+}
+
+function TabButtons({
+  tab,
+  onChange,
+  className,
+}: {
+  tab: Tab;
+  onChange: (tab: Tab) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1 rounded-lg border border-edge bg-surface p-1',
+        className,
+      )}
+    >
+      {TABS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onChange(item.id)}
+          className={cn(
+            'rounded-md px-3 py-1.5 text-sm font-medium transition',
+            tab === item.id
+              ? 'bg-elevated text-ink'
+              : 'text-muted hover:text-ink',
+          )}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -83,6 +125,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<ScenarioId | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [tab, setTab] = useState<Tab>('debugger');
   const activeIdRef = useRef<string | null>(null);
 
   function enterStaticPreview(): void {
@@ -262,18 +305,25 @@ export default function App() {
 
   const active =
     payments.find((payment) => payment.id === activeId) ?? payments[0] ?? null;
+  const otherProfile =
+    config?.profiles.find((profile) => profile.id !== config.activeProfile) ??
+    null;
 
   if (loading && !config) {
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="border border-mint/25 bg-panel/80 px-8 py-6 text-center shadow-glow">
-          <div className="text-2xl text-mint/60 animate-flicker">▚</div>
-          <div className="mt-3 text-[11px] uppercase tracking-[0.3em] text-mint">
-            booting trace console
+        <div className="w-full max-w-sm rounded-lg border border-edge bg-surface p-8 text-center">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md border border-accent/35 bg-accent/[0.12] text-accent">
+            <ShieldMark />
           </div>
-          <div className="mt-2 text-[10px] text-dim">{API_BASE}</div>
+          <div className="mt-4 text-sm font-medium text-ink">
+            Connecting to the trace server…
+          </div>
+          <div className="mt-1 font-mono text-[11px] text-faint">
+            {API_BASE}
+          </div>
           {error ? (
-            <div className="mt-4 max-w-sm border border-rose/40 bg-rose/10 px-3 py-2 text-[10px] text-rose">
+            <div className="mt-4 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
               {error}
             </div>
           ) : null}
@@ -283,148 +333,110 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen pb-10">
-      <header className="sticky top-0 z-30 border-b border-edge/80 bg-void/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-11 w-11 items-center justify-center border border-mint/40 bg-mint/5 text-mint shadow-glow">
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-30 border-b border-edge bg-canvas/90 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-accent/35 bg-accent/[0.12] text-accent">
               <ShieldMark />
-            </div>
-            <div>
-              <div className="text-[9px] uppercase tracking-[0.4em] text-mint/60">
-                agent-to-agent guardrail
-              </div>
-              <h1 className="text-lg font-semibold tracking-[0.12em] text-slate-100 sm:text-xl">
-                A2A PAYMENT{' '}
-                <span className="text-mint">FIREWALL</span>
-              </h1>
-              <div className="text-[10px] text-dim">
-                team <span className="text-slate-300">{TEAM_NAME}</span>
-                <span className="mx-1.5 text-dim/40">·</span>
-                mock-driven trace console
-                <span className="mx-1.5 text-dim/40">·</span>
-                no live MCP calls
-              </div>
+            </span>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-[15px] font-semibold text-ink">
+                A2A Payment Firewall
+              </span>
+              <span className="hidden rounded-full border border-edge bg-elevated px-2 py-0.5 text-[11px] text-muted sm:inline-flex">
+                {TEAM_NAME}
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="border border-mint/30 bg-mint/5 px-3 py-1.5 shadow-glow">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping bg-mint opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 bg-mint" />
+          <TabButtons tab={tab} onChange={setTab} className="hidden md:flex" />
+
+          <div className="flex items-center gap-2">
+            {config ? (
+              <button
+                type="button"
+                disabled={switching || !otherProfile}
+                onClick={() => {
+                  if (otherProfile) {
+                    void switchProfile(otherProfile.id);
+                  }
+                }}
+                title={
+                  otherProfile
+                    ? `Switch to ${otherProfile.chainName}`
+                    : 'Network profile'
+                }
+                className="hidden items-center gap-2 rounded-full border border-edge bg-surface px-3 py-1.5 text-xs text-muted transition hover:border-edge-hover hover:text-ink disabled:cursor-wait disabled:opacity-60 sm:inline-flex"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                <span className="text-ink">
+                  {config.chain.chain_name ?? config.chain.chain_id}
                 </span>
-                <span className="text-[8px] uppercase tracking-[0.28em] text-mint/70">
-                  active network
+                <span className="text-faint">·</span>
+                <span className="font-mono text-faint">
+                  {config.chain.chain_id}
                 </span>
-              </div>
-              <div className="mt-0.5 text-[12px] font-semibold text-mint">
-                {config?.chain.chain_name ?? 'connecting'}
-                <span className="ml-1.5 text-[10px] font-normal text-mint/50">
-                  #{config?.chain.chain_id ?? '—'}
-                </span>
-              </div>
-              <div className="text-[9px] text-dim">
-                {config?.chain.token.symbol ?? '—'}
-                {config?.chain.payment_protocol
-                  ? ` · ${config.chain.payment_protocol}`
-                  : ''}
-              </div>
-            </div>
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-3 w-3 text-faint"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden
+                >
+                  <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            ) : null}
+
+            {mode === 'static' ? (
+              <span className="hidden rounded-full border border-edge bg-elevated px-3 py-1.5 text-xs text-muted sm:inline-flex">
+                Static Demo
+              </span>
+            ) : (
+              <span className="hidden items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs text-success sm:inline-flex">
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    connected ? 'bg-success' : 'bg-danger',
+                  )}
+                />
+                Live SSE
+              </span>
+            )}
 
             <a
               href={GITHUB_URL}
               target="_blank"
               rel="noreferrer"
-              className="border border-edge/80 bg-void/40 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-dim transition hover:border-mint/40 hover:text-mint"
+              className="rounded-md border border-edge bg-surface px-3 py-1.5 text-xs text-muted transition hover:border-edge-hover hover:text-ink"
             >
               GitHub ↗
             </a>
-
-            {mode === 'static' ? (
-              <div className="border border-mint/30 bg-mint/5 px-3 py-2 text-[10px] uppercase tracking-[0.18em] text-mint">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 bg-mint" />
-                  STATIC DEMO · GITHUB PAGES
-                </div>
-                <div className="mt-0.5 text-[9px] tracking-normal text-dim">
-                  3 pre-recorded traces
-                </div>
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  'border px-3 py-2 text-[10px] uppercase tracking-[0.18em]',
-                  connected
-                    ? 'border-mint/25 bg-void/40 text-mint'
-                    : 'border-rose/30 bg-rose/5 text-rose',
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'h-1.5 w-1.5',
-                      connected ? 'bg-mint' : 'bg-rose',
-                    )}
-                  />
-                  SSE {connected ? 'live' : 'offline'}
-                </div>
-                <div className="mt-0.5 text-[9px] tracking-normal text-dim">
-                  /api/stream
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-4 sm:px-6 sm:py-6">
+      <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-5 sm:px-6 sm:py-6">
+        <TabButtons
+          tab={tab}
+          onChange={setTab}
+          className="mb-4 w-full justify-between md:hidden"
+        />
+
         {error && config ? (
-          <div className="border border-rose/40 bg-rose/10 px-3 py-2 text-[11px] text-rose">
+          <div className="mb-4 rounded-md border border-danger/30 bg-danger/10 px-4 py-2.5 text-xs text-danger">
             {error}
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <div className="xl:col-span-5">
-            <ArchitecturePanel />
-          </div>
-          <div className="xl:col-span-3">
-            <EvidencePanel />
-          </div>
-          <div className="xl:col-span-4">
-            <RoadmapPanel />
-          </div>
-        </div>
-
-        {config ? (
-          <>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <div className="xl:col-span-7">
-                <ChainConfigPanel
-                  config={config}
-                  switching={switching}
-                  onSwitchProfile={(profile) => {
-                    void switchProfile(profile);
-                  }}
-                />
-              </div>
-              <div className="xl:col-span-5">
-                <PolicyPanel
-                  policy={config.policy}
-                  chainName={
-                    config.chain.chain_name ?? String(config.chain.chain_id)
-                  }
-                  tokenSymbol={config.chain.token.symbol}
-                  tokenDecimals={config.chain.token.decimals}
-                  onSave={savePolicy}
-                />
-              </div>
-            </div>
-
+        {!config ? null : tab === 'debugger' ? (
+          <div className="space-y-5">
             <DemoControls
               scenarios={config.scenarios}
+              records={payments}
+              activeScenario={active?.scenario}
               running={running}
               error={null}
               mode={mode === 'static' ? 'static' : 'live'}
@@ -433,35 +445,31 @@ export default function App() {
               }}
             />
 
-            {payments.length > 0 ? (
-              <div className="flex items-center gap-2 overflow-x-auto border border-edge/60 bg-panel/50 px-3 py-2">
-                <span className="shrink-0 text-[9px] uppercase tracking-[0.2em] text-dim/60">
-                  run history
-                </span>
+            {payments.length > config.scenarios.length ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-edge bg-surface px-3 py-2">
+                <span className="text-xs text-faint">Recent runs</span>
                 {payments.slice(0, 12).map((payment) => (
                   <button
                     key={payment.id}
                     type="button"
                     onClick={() => setActiveId(payment.id)}
                     className={cn(
-                      'shrink-0 border px-2 py-1 text-[9px] transition',
+                      'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] transition',
                       payment.id === active?.id
-                        ? 'border-mint/40 bg-mint/10 text-mint'
-                        : 'border-edge/60 bg-void/30 text-dim hover:border-edge hover:text-slate-200',
+                        ? 'border-accent/40 bg-accent/[0.12] text-ink'
+                        : 'border-edge bg-canvas/40 text-muted hover:border-edge-hover hover:text-ink',
                     )}
                   >
                     {payment.id}
-                    <span className="mx-1 text-dim/40">·</span>
-                    {payment.scenario}
+                    <span className="text-faint">·</span>
                     <span
-                      className={cn(
-                        'ml-1.5',
+                      className={
                         payment.status === 'FAILED'
-                          ? 'text-rose'
+                          ? 'text-danger'
                           : payment.status === 'SETTLED'
-                            ? 'text-mint'
-                            : 'text-amber',
-                      )}
+                            ? 'text-success'
+                            : 'text-warning'
+                      }
                     >
                       {payment.status}
                     </span>
@@ -470,39 +478,63 @@ export default function App() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-              <div className="xl:col-span-8">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+              <div className="min-w-0 lg:col-span-8">
                 <Timeline
                   record={active}
                   mode={mode === 'static' ? 'static' : 'live'}
                 />
               </div>
-              <div className="space-y-4 xl:col-span-4">
+              <div className="space-y-5 lg:col-span-4">
                 <ReceiptPanel record={active} />
-                <WhyPanel />
+                <EvidencePanel />
               </div>
             </div>
-          </>
-        ) : null}
+          </div>
+        ) : tab === 'policy' ? (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <PolicyPanel
+              policy={config.policy}
+              chainName={config.chain.chain_name ?? String(config.chain.chain_id)}
+              tokenSymbol={config.chain.token.symbol}
+              tokenDecimals={config.chain.token.decimals}
+              onSave={savePolicy}
+            />
+            <ChainConfigPanel
+              config={config}
+              switching={switching}
+              onSwitchProfile={(profile) => {
+                void switchProfile(profile);
+              }}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+            <div className="lg:col-span-5">
+              <ArchitecturePanel />
+            </div>
+            <div className="space-y-5 lg:col-span-7">
+              <WhyPanel />
+              <RoadmapPanel />
+            </div>
+          </div>
+        )}
       </main>
 
-      <footer className="mx-auto max-w-[1600px] px-4 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge/60 pt-3 text-[9px] uppercase tracking-[0.18em] text-dim/50">
+      <footer className="mx-auto w-full max-w-[1440px] px-4 pb-8 pt-2 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge pt-4 text-xs text-faint">
           <span>
-            a2a payment firewall · team {TEAM_NAME} · stateMachine +
-            MockHspMcpClient · mock only
+            A2A Payment Firewall · Team {TEAM_NAME} · HashKey Horizon Seoul
+            Track 2
           </span>
-          <span className="flex flex-wrap items-center gap-2">
-            <span>payment rail derived at runtime · receipt anchor HSK Chain</span>
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="text-mint/70 underline decoration-mint/30 underline-offset-2 hover:text-mint"
-            >
-              GitHub ↗
-            </a>
-          </span>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-muted transition hover:text-ink"
+          >
+            GitHub ↗
+          </a>
         </div>
       </footer>
     </div>

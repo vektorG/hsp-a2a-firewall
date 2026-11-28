@@ -1,9 +1,8 @@
+import type { ReactNode } from 'react';
 import {
-  GITHUB_URL,
   RECEIPT_DEPLOY_TX,
   RECEIPT_REGISTRY_ADDRESS,
   STATIC_RECEIPT,
-  TEAM_NAME,
 } from '../staticPreview';
 import { shortHash } from '../lib/format';
 import { CopyValue } from './CopyValue';
@@ -11,120 +10,130 @@ import { Panel, Tag } from './Panel';
 
 const PIPELINE = [
   {
-    id: '01',
     title: 'Agent intent',
-    detail: 'merchant · token · amount',
+    detail: 'Merchant, token and amount requested by the agent.',
   },
   {
-    id: '02',
     title: 'Policy gate',
-    detail: 'maxTx · daily ledger · allowlists',
+    detail: 'maxTx, daily spend ledger and merchant/token allowlists.',
   },
   {
-    id: '03',
     title: 'Quote cross-check',
-    detail: 'EIP-712 amount / recipient / token / chainId',
+    detail: 'EIP-712 amount, recipient, token and chainId versus the intent.',
   },
   {
-    id: '04',
     title: 'HSP settlement',
-    detail: 'create → prepare → finalize → submit → query',
+    detail: 'create → prepare → finalize → submit → query.',
   },
   {
-    id: '05',
     title: 'Receipt anchor',
-    detail: 'AgentReceiptRegistry on HSK after attribution',
+    detail: 'AgentReceiptRegistry on HSK only after attribution verification.',
   },
 ];
 
 export function ArchitecturePanel() {
   return (
     <Panel
-      index="01 / architecture"
       title="Guardrail pipeline"
-      actions={<Tag tone="mint">before signature</Tag>}
+      subtitle="Five checks between an agent intent and a signed payment"
+      actions={
+        <Tag tone="accent" mono>
+          before signature
+        </Tag>
+      }
     >
-      <div className="space-y-2">
+      <ol className="space-y-0">
         {PIPELINE.map((step, index) => (
-          <div
-            key={step.id}
-            className="grid grid-cols-[30px_minmax(0,1fr)] items-start gap-3 border border-edge/60 bg-void/30 px-3 py-2"
+          <li
+            key={step.title}
+            className="relative grid grid-cols-[28px_minmax(0,1fr)] gap-3 pb-4 last:pb-0"
           >
-            <span className="text-[10px] text-mint/60">{step.id}</span>
-            <div>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-[11px] font-semibold text-slate-100">
-                  {step.title}
-                </span>
-                {index < PIPELINE.length - 1 ? (
-                  <span className="text-[9px] text-dim/50">↓</span>
-                ) : null}
-              </div>
-              <div className="text-[10px] leading-relaxed text-dim">
+            {index < PIPELINE.length - 1 ? (
+              <span className="absolute bottom-0 left-[13px] top-7 w-px bg-edge" />
+            ) : null}
+            <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full border border-edge bg-elevated text-xs font-medium text-muted">
+              {index + 1}
+            </span>
+            <div className="pt-0.5">
+              <div className="text-sm font-medium text-ink">{step.title}</div>
+              <div className="mt-0.5 text-xs leading-relaxed text-muted">
                 {step.detail}
               </div>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-      <p className="mt-3 border-l border-mint/30 pl-3 text-[10px] leading-relaxed text-dim">
+      </ol>
+
+      <div className="mt-5 rounded-md border border-accent/35 bg-accent/[0.12] px-4 py-3 text-xs leading-relaxed text-muted">
         Denied intents never create an order and never reach the signer. The
         receipt is anchored only after{' '}
-        <span className="text-slate-300">SETTLED</span> plus attribution
+        <span className="font-mono text-ink">SETTLED</span> plus attribution
         verification.
-      </p>
+      </div>
     </Panel>
+  );
+}
+
+function EvidenceRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] items-start gap-3 px-4 py-3">
+      <span className="pt-0.5 text-xs text-muted">{label}</span>
+      <div className="min-w-0 text-xs leading-relaxed">{children}</div>
+    </div>
   );
 }
 
 export function EvidencePanel() {
   return (
     <Panel
-      index="09 / on-chain evidence"
-      title="Receipt registry"
-      actions={<Tag tone="sky">HSK Chain</Tag>}
+      title="On-chain evidence"
+      subtitle="Real HSK Chain deployment, separate from the mock fixtures"
+      actions={
+        <Tag tone="accent" mono>
+          chain {STATIC_RECEIPT.chainId}
+        </Tag>
+      }
     >
-      <div className="space-y-3">
-        <div>
-          <div className="label mb-1">AgentReceiptRegistry</div>
+      <div className="divide-y divide-edge rounded-lg border border-edge">
+        <EvidenceRow label="Registry">
           <CopyValue
             value={RECEIPT_REGISTRY_ADDRESS}
             href={`${STATIC_RECEIPT.explorerUrl}/address/${RECEIPT_REGISTRY_ADDRESS}`}
             display={shortHash(RECEIPT_REGISTRY_ADDRESS, 12, 8)}
           />
-          <div className="mt-1 text-[9px] text-dim/60">
-            chain {STATIC_RECEIPT.chainId} · deployed{' '}
-            {STATIC_RECEIPT.deployedAt?.slice(0, 10)}
+          <div className="mt-1 text-[11px] text-faint">
+            AgentReceiptRegistry
           </div>
-        </div>
+        </EvidenceRow>
 
-        <div className="border-t border-edge/50 pt-3">
-          <div className="label mb-1">deployment tx</div>
+        <EvidenceRow label="Deployment TX">
           <a
             href={`${STATIC_RECEIPT.explorerTxUrl}${RECEIPT_DEPLOY_TX}`}
             target="_blank"
             rel="noreferrer"
-            className="text-[11px] text-sky/90 underline decoration-sky/30 underline-offset-2 hover:text-sky"
+            className="text-xs text-accent transition hover:text-accent-hover hover:underline hover:underline-offset-2"
           >
-            view on explorer ↗
+            View deployment ↗
           </a>
-          <div className="mt-1 text-[9px] text-dim/60">
+          <div className="mt-1 font-mono text-[11px] text-faint">
             {shortHash(RECEIPT_DEPLOY_TX, 12, 8)}
           </div>
-        </div>
+        </EvidenceRow>
 
-        <div className="border-t border-edge/50 pt-3">
-          <div className="label mb-1">team</div>
-          <div className="text-[11px] text-slate-200">{TEAM_NAME}</div>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 inline-block text-[10px] text-mint/90 underline decoration-mint/30 underline-offset-2 hover:text-mint"
-          >
-            github.com/vektorG/hsp-a2a-firewall ↗
-          </a>
-        </div>
+        <EvidenceRow label="Deployed">
+          <span className="font-mono text-xs text-ink">
+            {STATIC_RECEIPT.deployedAt?.slice(0, 10) ?? '—'}
+          </span>
+          <div className="mt-1 text-[11px] text-faint">
+            {STATIC_RECEIPT.chainName} · chain {STATIC_RECEIPT.chainId}
+          </div>
+        </EvidenceRow>
       </div>
     </Panel>
   );

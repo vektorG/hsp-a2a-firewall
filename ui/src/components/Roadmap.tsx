@@ -2,9 +2,9 @@ import { Panel, Tag } from './Panel';
 
 const PHASES = [
   {
-    id: '01',
     title: 'Firewall core',
-    status: 'shipped' as const,
+    status: 'Shipped' as const,
+    tone: 'success' as const,
     items: [
       'Deterministic policy gate before order creation',
       'Pre-sign EIP-712 cross-check against approved intent',
@@ -12,19 +12,19 @@ const PHASES = [
     ],
   },
   {
-    id: '02',
     title: 'Trace control plane',
-    status: 'live' as const,
+    status: 'Live' as const,
+    tone: 'accent' as const,
     items: [
       'SSE timeline fed by the real state machine',
-      'Switchable chain / token profiles at runtime',
+      'Switchable chain and token profiles at runtime',
       'Persisted policy editor with daily spend ledger',
     ],
   },
   {
-    id: '03',
     title: 'Agent SDK',
-    status: 'next' as const,
+    status: 'Next' as const,
+    tone: 'default' as const,
     items: [
       'Drop-in middleware for A2A agent runtimes',
       'Merchant-scoped policy packs and approvals',
@@ -36,42 +36,31 @@ const PHASES = [
 export function RoadmapPanel() {
   return (
     <Panel
-      index="07 / roadmap"
-      title="From guardrail to protocol"
-      actions={<Tag>3 phases</Tag>}
+      title="Roadmap"
+      subtitle="From a single guardrail to a shared payment protocol"
+      actions={<Tag mono>3 phases</Tag>}
     >
-      <div className="space-y-2">
+      <div className="space-y-3">
         {PHASES.map((phase) => (
           <div
-            key={phase.id}
-            className="border border-edge/60 bg-void/30 p-3"
+            key={phase.title}
+            className="rounded-md border border-edge bg-canvas/30 p-4"
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-baseline gap-2">
-                <span className="text-[10px] text-dim/50">{phase.id}</span>
-                <span className="text-[11px] font-semibold text-slate-100">
-                  {phase.title}
-                </span>
-              </div>
-              <span
-                className={
-                  phase.status === 'shipped'
-                    ? 'border border-mint/30 bg-mint/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.18em] text-mint'
-                    : phase.status === 'live'
-                      ? 'border border-sky/30 bg-sky/10 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.18em] text-sky'
-                      : 'border border-edge/70 bg-void/40 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.18em] text-dim'
-                }
-              >
-                {phase.status}
+              <span className="text-sm font-medium text-ink">
+                {phase.title}
               </span>
+              <Tag tone={phase.tone} mono>
+                {phase.status}
+              </Tag>
             </div>
-            <ul className="mt-2 space-y-1">
+            <ul className="mt-2.5 space-y-1.5">
               {phase.items.map((item) => (
                 <li
                   key={item}
-                  className="flex gap-2 text-[10px] leading-relaxed text-dim"
+                  className="flex gap-2 text-xs leading-relaxed text-muted"
                 >
-                  <span className="text-mint/40">›</span>
+                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-faint" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -86,44 +75,53 @@ export function RoadmapPanel() {
 export function WhyPanel() {
   return (
     <Panel
-      index="08 / why"
       title="Why this matters"
+      subtitle="Autonomy without a pre-sign guardrail is an unauthorized spend waiting to happen"
       tone="success"
-      actions={<Tag tone="mint">before signature</Tag>}
+      actions={
+        <Tag tone="accent" mono>
+          before signature
+        </Tag>
+      }
     >
-      <p className="text-[12px] leading-relaxed text-slate-200">
+      <p className="text-sm leading-relaxed text-ink">
         An autonomous agent can hallucinate a merchant, a price, or a token —
         and turn that mistake into an unauthorized spend.
       </p>
-      <p className="mt-2 text-[11px] leading-relaxed text-dim">
+      <p className="mt-2 text-xs leading-relaxed text-muted">
         The firewall sits between intent and signature. It evaluates policy
-        before <span className="text-slate-300">create_order</span>, cross-checks
-        the server&apos;s quote against the approved intent before signing, and
-        anchors a receipt only after attribution is verified.
+        before <span className="font-mono text-ink">create_order</span>,
+        cross-checks the server&apos;s quote against the approved intent before
+        signing, and anchors a receipt only after attribution is verified.
       </p>
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-4 space-y-3">
         {[
-          ['01', 'Policy gate', 'No order or signature for denied intents.'],
-          ['02', 'Quote cross-check', 'Server price, recipient, token and chain must match.'],
-          ['03', 'Receipt after settlement', 'Ledger and anchor update only after SETTLED.'],
-        ].map(([id, title, copy]) => (
-          <div
-            key={id}
-            className="grid grid-cols-[26px_minmax(0,1fr)] gap-2 border-l border-mint/30 pl-2"
-          >
-            <span className="text-[10px] text-mint/60">{id}</span>
+          ['Policy gate', 'No order or signature for denied intents.'],
+          [
+            'Quote cross-check',
+            'Server price, recipient, token and chain must match.',
+          ],
+          [
+            'Receipt after settlement',
+            'Ledger and anchor update only after SETTLED.',
+          ],
+        ].map(([title, copy]) => (
+          <div key={title} className="flex gap-2.5">
+            <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+              <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M3 8.5 6.5 12 13 4.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-200">
-                {title}
-              </div>
-              <div className="text-[10px] leading-relaxed text-dim">{copy}</div>
+              <div className="text-xs font-medium text-ink">{title}</div>
+              <div className="text-xs leading-relaxed text-muted">{copy}</div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 border border-mint/20 bg-mint/5 px-3 py-2 text-[10px] leading-relaxed text-mint/80">
+      <div className="mt-4 rounded-md border border-success/25 bg-success/[0.08] px-3 py-2.5 text-xs leading-relaxed text-success">
         Blocked paths never reach the signer. That is the whole point.
       </div>
     </Panel>

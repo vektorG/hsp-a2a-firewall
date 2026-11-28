@@ -96,21 +96,23 @@ export function PolicyPanel({
 
   return (
     <Panel
-      index="03 / policy"
       title="Spend policy"
+      subtitle="Evaluated twice: before create_order and again on the server quote."
       actions={
         <>
-          <Tag>persisted local</Tag>
-          <Tag tone="mint">pre-sign gate</Tag>
+          <Tag mono>pre-sign gate</Tag>
+          <Tag>persisted</Tag>
         </>
       }
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="label mb-1.5 block">maxTx / base units</span>
+            <span className="label mb-1.5 block">
+              Max transaction (base units)
+            </span>
             <input
-              className="field"
+              className="field font-mono"
               value={maxTxAmount}
               onChange={(event) => setMaxTxAmount(event.target.value)}
               inputMode="numeric"
@@ -118,9 +120,11 @@ export function PolicyPanel({
             />
           </label>
           <label className="block">
-            <span className="label mb-1.5 block">dailyLimit / base units</span>
+            <span className="label mb-1.5 block">
+              Daily limit (base units)
+            </span>
             <input
-              className="field"
+              className="field font-mono"
               value={dailyLimit}
               onChange={(event) => setDailyLimit(event.target.value)}
               inputMode="numeric"
@@ -129,20 +133,21 @@ export function PolicyPanel({
           </label>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border border-edge/50 bg-void/30 px-3 py-2 text-[10px] text-dim">
-          <span className="text-mint/70">active rail</span>
-          <span className="text-slate-200">{chainName}</span>
-          <span>·</span>
-          <span>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-edge bg-canvas/30 px-3 py-2.5 text-xs text-muted">
+          <span className="text-ink">{chainName}</span>
+          <span className="text-faint">·</span>
+          <span className="font-mono">
             {tokenSymbol} / {tokenDecimals} decimals
           </span>
-          <span className="ml-auto text-dim/60">
-            over-limit demo = maxTx + 1
+          <span className="ml-auto text-[11px] text-faint">
+            Over-limit demo = maxTx + 1
           </span>
         </div>
 
         <label className="block">
-          <span className="label mb-1.5 block">allowedMerchants / comma separated</span>
+          <span className="label mb-1.5 block">
+            Allowed merchants (comma separated)
+          </span>
           <input
             className="field"
             value={merchants}
@@ -152,9 +157,11 @@ export function PolicyPanel({
         </label>
 
         <label className="block">
-          <span className="label mb-1.5 block">allowedTokens / one address per line</span>
+          <span className="label mb-1.5 block">
+            Allowed tokens (one address per line)
+          </span>
           <textarea
-            className="field min-h-[86px] resize-y leading-relaxed"
+            className="field min-h-[96px] resize-y font-mono leading-relaxed"
             value={tokens}
             onChange={(event) => setTokens(event.target.value)}
             spellCheck={false}
@@ -165,35 +172,35 @@ export function PolicyPanel({
           <button
             type="submit"
             disabled={state.kind === 'saving'}
-            className="border border-mint/40 bg-mint/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-mint transition hover:bg-mint/20 disabled:cursor-wait disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:cursor-wait disabled:opacity-50"
           >
-            {state.kind === 'saving' ? 'saving…' : 'save policy'}
+            {state.kind === 'saving' ? 'Saving…' : 'Save policy'}
           </button>
 
           {state.kind === 'saved' ? (
-            <span className="text-[10px] text-mint/80">
-              saved to data/policy.json · {state.at}
+            <span className="text-xs text-success">
+              Saved to data/policy.json · {state.at}
             </span>
           ) : null}
           {state.kind === 'error' ? (
-            <span className="text-[10px] text-rose">{state.message}</span>
+            <span className="text-xs text-danger">{state.message}</span>
           ) : null}
           {state.kind === 'idle' ? (
-            <span className="text-[10px] text-dim/60">
-              edits apply to the next demo run
+            <span className="text-xs text-faint">
+              Edits apply to the next demo run.
             </span>
           ) : null}
         </div>
 
         <div
           className={cn(
-            'border-l pl-3 text-[10px] leading-relaxed text-dim',
-            state.kind === 'error' ? 'border-rose/40' : 'border-edge/60',
+            'rounded-md border-l-2 pl-3 text-xs leading-relaxed text-faint',
+            state.kind === 'error' ? 'border-danger/60' : 'border-edge',
           )}
         >
-          Policy is evaluated twice: once before <span className="text-slate-300">create_order</span>,
-          then again on the server-quoted total before signing. A denied intent
-          never reaches the signer.
+          A denied intent never reaches the signer. The post-quote check
+          re-validates the server total against the approved intent before any
+          EIP-712 signature is produced.
         </div>
       </form>
     </Panel>

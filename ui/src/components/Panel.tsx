@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { cn } from '../lib/format';
 
 interface PanelProps {
-  index: string;
   title: string;
+  subtitle?: string;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -11,8 +11,8 @@ interface PanelProps {
 }
 
 export function Panel({
-  index,
   title,
+  subtitle,
   actions,
   children,
   className,
@@ -21,36 +21,25 @@ export function Panel({
   return (
     <section
       className={cn(
-        'relative border bg-panel/75 shadow-[0_18px_60px_-40px_rgba(0,0,0,0.9)] backdrop-blur-sm',
-        tone === 'default' && 'border-edge/80',
-        tone === 'danger' && 'border-rose/30',
-        tone === 'success' && 'border-mint/25',
+        'rounded-lg border bg-surface',
+        tone === 'default' && 'border-edge',
+        tone === 'danger' && 'border-danger/35',
+        tone === 'success' && 'border-success/30',
         className,
       )}
     >
-      <span
-        aria-hidden
-        className={cn(
-          'absolute -left-px -top-px h-2.5 w-2.5 border-l border-t',
-          tone === 'danger'
-            ? 'border-rose'
-            : tone === 'success'
-              ? 'border-mint'
-              : 'border-mint/60',
-        )}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge/70 px-4 py-3">
-        <div className="flex items-baseline gap-3">
-          <span className="text-[10px] uppercase tracking-[0.3em] text-mint/60">
-            {index}
-          </span>
-          <h2 className="text-[13px] font-semibold uppercase tracking-[0.16em] text-slate-100">
-            {title}
-          </h2>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-edge px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          {subtitle ? (
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">{subtitle}</p>
+          ) : null}
         </div>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        {actions ? (
+          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        ) : null}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
@@ -58,19 +47,23 @@ export function Panel({
 export function Tag({
   children,
   tone = 'default',
+  mono = false,
 }: {
   children: ReactNode;
-  tone?: 'default' | 'mint' | 'rose' | 'amber' | 'sky';
+  tone?: 'default' | 'accent' | 'success' | 'danger' | 'warning';
+  mono?: boolean;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.16em]',
-        tone === 'default' && 'border-edge/80 bg-void/40 text-dim',
-        tone === 'mint' && 'border-mint/30 bg-mint/10 text-mint',
-        tone === 'rose' && 'border-rose/35 bg-rose/10 text-rose',
-        tone === 'amber' && 'border-amber/35 bg-amber/10 text-amber',
-        tone === 'sky' && 'border-sky/35 bg-sky/10 text-sky',
+        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-medium',
+        mono ? 'font-mono' : 'font-sans',
+        tone === 'default' && 'border-edge bg-elevated text-muted',
+        tone === 'accent' && 'border-accent/35 bg-accent/[0.12] text-accent',
+        tone === 'success' &&
+          'border-success/30 bg-success/10 text-success',
+        tone === 'danger' && 'border-danger/30 bg-danger/10 text-danger',
+        tone === 'warning' && 'border-warning/30 bg-warning/10 text-warning',
       )}
     >
       {children}
